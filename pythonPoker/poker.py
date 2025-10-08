@@ -2,51 +2,101 @@ import pygame
 import random
 
 pygame.init()
+pygame.font.init()
+font = pygame.font.SysFont("Consolas", 35)
 screenWidth, screenHeight = 1200, 700
-POKERGREEN = pygame.Color("#35654d")
+POKERGREEN = pygame.Color("#3c7257")
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
-pygame.font.init()
-font = pygame.font.SysFont("Copperplate Gothic", 90)
-
-
+actionButtonWidth, actionButtonHeight = 120, 40
+# calculate the button x coordinate so that they are mathematically equally spaced across the screen
+# since its going to be 3 buttons displayed at a time the x coordinates are decided by multipying the screen width by 0.25 * n
+# half button width is subtracted since it is draw from the top left corner.
+actionButtonPosX = {"check": (int(screenWidth * 0.25)) - actionButtonWidth / 2, "fold": (int(screenWidth * 0.50)) - actionButtonWidth / 2}
+actionButtonPosY = screenHeight - 100 # each action button will share the same height
+# ^ both X and Y coords are calculated from screenHeight so that it scales accordingly
 screen = pygame.display.set_mode((screenWidth, screenHeight))
 
 class GameController:
     def __init__(self):
-        self._communityCards = []
-        self._players = []
-        self._foldedPlayers = []
-        self._dealer = Dealer()
+        self._players = [] # list of Player() sublasses [AI/HUMAN] objects
+        self._communityCards = [] # list of Card objects
+        self._dealer = Dealer() # deck created in Dealer class
+        self._currentPlayerTurn = 0
+        self._gameTurn = 0
+        humanPlayer = HumanPlayer() # only 1 human in this poker game
+        self._players.append(humanPlayer)
+        self._buttons = ButtonManager({
+            # key = buttonname, value = Button object
+            # the action of the button e,g, humanPlayer.check comes from the previously created humanPlayer which is why humanPlayer is created before this
+            "check": Button(actionButtonPosX["check"], actionButtonPosY, actionButtonWidth, actionButtonHeight, humanPlayer.check, "check", WHITE),
+            "fold": Button(actionButtonPosX["fold"], actionButtonPosY, actionButtonWidth, actionButtonHeight, humanPlayer.fold, "fold", WHITE),
+        }) # buttonManager takes the buttons as dictionary so it is easy to link to button
+        # numbers not used since it would get confusing as which button i am refering to
 
-    def playerAction(self, players):
-        for player in players:
-            player.check()
+        # this stores the games turns chronological order
+        # its needed to cleanly go through the function calls without a if, else bird's nest mess
+        self.gameTurnState = {
+            1: self.flop, 
+            2: self.turn,
+            3: self.river
+        } # ^ doesnt start with preFlop since it happens at the beginning of the game and it's much easier to start the index at 0 and begin the 
+        # function calls after the preFlop is done
+        
+    def preFlop(self):
+        self._dealer.dealPlayerHands(self._players)
+
+    def flop(self):
+        self._dealer.dealFlop(self._communityCards)
+
+    def turn(self):
+        self._dealer.dealTurn(self._communityCards)
+
+    def river(self):
+        self._dealer.dealRiver(self._communityCards)
+
+    def checkRoundEnd(self):
+        # the round is considered ended when each player has made their turn
+        # this condition will change when betting, i.e. essential feature balance system is added.
+        return self._currentPlayerTurn > len(self._players) - 1
+    
+    def startNextRound(self):
+        self._currentPlayerTurn = 0 # starting player will be at the 0th index
+        self._gameTurn += 1 # goes to the next game turn e.g self.flop -> self.turn
+        self.gameTurnState[self._gameTurn]() # calls the function from the key-value pair
 
     def gameLoop(self):
-        self._dealer.shuffle()  
-        player1 = HumanPlayer("timmy")
-        player1.addToGame(self._players)
+        self._dealer.shuffle() # must shuffle at beggining of every game 
+        self.preFlop()
+        # print([card.getName() for card in self._humanPlayer.getHand()])
         clock = pygame.time.Clock()
-        buttonTest = Button(100, 100, 250, 100, player1.check, "check", WHITE)
         while True:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     exit()
                 if event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == 1:
-                        buttonTest.onClick()
+                    if event.button == 1: # if left click
+                        if self._buttons.checkButtonClicked() == True: # loops over all buttons to see if one was clicked
+                            self._currentPlayerTurn += 1
+                            # the HUMAN player's turn is finished after a button is clicked
+
+            if self.checkRoundEnd() == True: 
+                # ^ after all players are done w/ their turn deal the next card essentially
+                self.startNextRound()
+                print(f"round ended {[card.getName() for card in self._communityCards]}")
+
             screen.fill(POKERGREEN)
-            buttonTest.drawButton()
+            self._buttons.drawAllButtons()
             pygame.display.update()
-            clock.tick(60)
+            clock.tick(60) # 60 fps
 
 class Dealer:
     def __init__(self):
-        self._deck = Deck().createDeck()
+        self._deck = Deck().createDeck() # list of 52 Card objects, in order
 
     def dealCard(self):
         return self._deck.pop()
+        # .pop() used to mimic how dealing is actually done, by removing the top card in the deck 
     
     def shuffle(self):
         random.shuffle(self._deck)
@@ -54,11 +104,11 @@ class Dealer:
     # dealer methods named after their turn in poker
     def dealFlop(self, communityCards):
         # this takes 3 cards from the deck and adds them the to community card list
-        for _ in range(0, 3):
+        for _ in range(0, 3): # iterator not important so "_" used
             card = self.dealCard()
             communityCards.append(card)
     
-    # the turn in poker deals 1 community card and this method does that,
+    # the turn and river in poker deals 1 community card and the 2 following methods do that
     def dealTurn(self, communityCards):
         card = self.dealCard()
         communityCards.append(card)
@@ -66,13 +116,14 @@ class Dealer:
     def dealRiver(self, communityCards):
         card = self.dealCard()
         communityCards.append(card)
-        #trigger hand strength evaluator function
+        # trigger hand strength evaluator function
     
     def dealPlayerHands(self, playerList):
         # this for loop deals a card to each player and repeats it so that each player gets 2 cards
         for _ in range(0, 2):
             for player in playerList:
-                player.giveCard(self.dealCard())
+                card = self.dealCard()
+                player.giveCard(card)
 
 
 class Card:
@@ -80,7 +131,7 @@ class Card:
         self._value = value
         self._suit = suit
 
-    # this returns the name of the card in the convention of the card images
+    # returns the name of the card in the convention of the card images
     def getName(self):
         return f"{self._value}_of_{self._suit}"
 
@@ -102,59 +153,69 @@ class Deck:
 
 
 class Player():
-    def __init__(self, name):
-        self._name = name
+    def __init__(self):
         self._hand = []
         self._isFolded = False
 
     def fold(self):
         self._isFolded = True
 
-    def check(self):
-        print("I CHECKED")
-
-    def getName(self):
-        return self._name
+    def check(self): # skips player turn, if previous turn was check or nothing
+        print("I CHECKED") # debugging
+        pass
 
     def giveCard(self, card):
-        self._hand.append(card)
-
-    def getHand(self):
-        return self._hand
+        self._hand.append(card) # append Card object to hand attribute
     
     def addToGame(self, playerList):
         playerList.append(self)
 
 
-class HumanPlayer(Player):
-    def __init__(self, name):
-        super().__init__(name)
-        pass
+class HumanPlayer(Player): # inheritance
+    def __init__(self):
+        super().__init__()
 
 
-class Button(pygame.Rect):
+class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
     def __init__(self, x, y, width, height, action, text, color):
         super().__init__(x, y, width, height)
-        self._x = x
-        self._y = y
-        self._width = width
-        self._height = height
-        self._text = font.render(text, True, BLACK)
         self._action = action
+        self._text = font.render(text, True, BLACK)
         self._color = color
-        self._rect = pygame.Rect(self._x, self._y, self._width, self._height)
+        self._active = True
 
     def renderButtonText(self):
-        screen.blit(self._text, (self._x, self._y))
+        textRect = self._text.get_rect(center=self.center) # center text in the button rectangle
+        screen.blit(self._text, textRect) 
 
     def drawButton(self):
-        pygame.draw.rect(screen, self._color, (self._x, self._y, self._width, self._height))
-        self.renderButtonText()
+        pygame.draw.rect(screen, self._color, (self.x, self.y, self.width, self.height)) # draw rectangle of button first
+        self.renderButtonText() # then do the button text so that it shows ontop
     
-    def onClick(self):
-        if self._rect.collidepoint((pygame.mouse.get_pos())):
-            # if the player clicks this button, hadouken!
+    def wasClicked(self):
+        if self.collidepoint(pygame.mouse.get_pos()):
+            # if the player clicks this button then hadouken! do the button's action
             self._action()
+            return True # signifies yes this button has been pressed
+        else:
+            return False # returns False if the button was not pressed
+
+
+class ButtonManager:
+    def __init__(self, buttons):
+        self._buttons = buttons # buttons is a dict()
+
+    def checkButtonClicked(self):
+        clicked = False # starts false and remains unchanged if a button was not pressed
+        for buttonName in self._buttons: # loops over dict() keys
+            if self._buttons[buttonName].wasClicked() == True:
+                clicked = True
+        return clicked # this function is needed to check that a button has been pressed 
+    # so i can change the game state accorindgly
+
+    def drawAllButtons(self):
+        for buttonName in self._buttons:
+            self._buttons[buttonName].drawButton()
 
 game = GameController()
 game.gameLoop()

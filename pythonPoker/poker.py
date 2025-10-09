@@ -12,9 +12,11 @@ actionButtonWidth, actionButtonHeight = 120, 40
 # calculate the button x coordinate so that they are mathematically equally spaced across the screen
 # since its going to be 3 buttons displayed at a time the x coordinates are decided by multipying the screen width by 0.25 * n
 # half button width is subtracted since it is draw from the top left corner.
-actionButtonPosX = {"check": (int(screenWidth * 0.25)) - actionButtonWidth / 2, "fold": (int(screenWidth * 0.50)) - actionButtonWidth / 2}
-actionButtonPosY = screenHeight - 100 # each action button will share the same height
+actionButtonX = {"check": (int(screenWidth * 0.25)) - actionButtonWidth / 2, "fold": (int(screenWidth * 0.50)) - actionButtonWidth / 2}
+actionbuttonY = screenHeight - 100 # each action button will share the same height
 # ^ both X and Y coords are calculated from screenHeight so that it scales accordingly
+handCardX = [(screenWidth / 2 - Card()._width, screenHeight - 400)]
+
 screen = pygame.display.set_mode((screenWidth, screenHeight))
 
 class GameController:
@@ -24,13 +26,13 @@ class GameController:
         self._dealer = Dealer() # deck created in Dealer class
         self._currentPlayerTurn = 0
         self._gameTurn = 0
-        humanPlayer = HumanPlayer() # only 1 human in this poker game
+        humanPlayer = Player() # only 1 human in this poker game
         self._players.append(humanPlayer)
         self._buttons = ButtonManager({
             # key = buttonname, value = Button object
             # the action of the button e,g, humanPlayer.check comes from the previously created humanPlayer which is why humanPlayer is created before this
-            "check": Button(actionButtonPosX["check"], actionButtonPosY, actionButtonWidth, actionButtonHeight, humanPlayer.check, "check", WHITE),
-            "fold": Button(actionButtonPosX["fold"], actionButtonPosY, actionButtonWidth, actionButtonHeight, humanPlayer.fold, "fold", WHITE),
+            "check": Button(actionButtonX["check"], actionbuttonY, actionButtonWidth, actionButtonHeight, humanPlayer.check, "check", WHITE),
+            "fold": Button(actionButtonX["fold"], actionbuttonY, actionButtonWidth, actionButtonHeight, humanPlayer.fold, "fold", WHITE),
         }) # buttonManager takes the buttons as dictionary so it is easy to link to button
         # numbers not used since it would get confusing as which button i am refering to
 
@@ -87,8 +89,10 @@ class GameController:
 
             screen.fill(POKERGREEN)
             self._buttons.drawAllButtons()
+            self._players[0]._hand[0].draw()
             pygame.display.update()
             clock.tick(60) # 60 fps
+        
 
 class Dealer:
     def __init__(self):
@@ -126,21 +130,29 @@ class Dealer:
                 player.giveCard(card)
 
 
-class Card:
+class Card():
     def __init__(self, value, suit):
         self._value = value
         self._suit = suit
+        self._path = f"cards/{self.getName()}.png"
+        self._width = 125
+        self._height = 182
+        self._image = pygame.transform.scale(pygame.image.load(self._path), (125, 182))
 
     # returns the name of the card in the convention of the card images
     def getName(self):
         return f"{self._value}_of_{self._suit}"
+    
+    # size: 500 × 726
+    def draw(self):
+        screen.blit(self._image, (400, 400))
 
 
 class Deck:
     def __init__(self):
         self._values = ["ace", "2", "3", "4", "5", "6", "7", "8", "9", "10", "jack", "queen", "king"]
         self._suits = ["clubs", "diamonds", "hearts", "spades"]
-        self._deck = [] # use a list for indexing
+        self._deck = [] # use a list for indexing 
 
     # this method loops over all the possible values and suits and creates all the possible cards
     def createDeck(self):
@@ -156,6 +168,8 @@ class Player():
     def __init__(self):
         self._hand = []
         self._isFolded = False
+        self._x = screenWidth / 2
+        self._y = screenHeight / 2
 
     def fold(self):
         self._isFolded = True
@@ -169,11 +183,6 @@ class Player():
     
     def addToGame(self, playerList):
         playerList.append(self)
-
-
-class HumanPlayer(Player): # inheritance
-    def __init__(self):
-        super().__init__()
 
 
 class Button(pygame.Rect): # uses the pre-made Rect class from pygame library

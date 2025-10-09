@@ -4,7 +4,7 @@ import random
 pygame.init()
 pygame.font.init()
 font = pygame.font.SysFont("Consolas", 35)
-screenWidth, screenHeight = 1200, 700
+screenWidth, screenHeight = 1500, 900
 POKERGREEN = pygame.Color("#3c7257")
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -13,9 +13,14 @@ actionButtonWidth, actionButtonHeight = 120, 40
 # since its going to be 3 buttons displayed at a time the x coordinates are decided by multipying the screen width by 0.25 * n
 # half button width is subtracted since it is draw from the top left corner.
 actionButtonX = {"check": (int(screenWidth * 0.25)) - actionButtonWidth / 2, "fold": (int(screenWidth * 0.50)) - actionButtonWidth / 2}
-actionbuttonY = screenHeight - 100 # each action button will share the same height
+actionbuttonY = screenHeight - 70 # each action button will share the same height
 # ^ both X and Y coords are calculated from screenHeight so that it scales accordingly
-handCardX = [(screenWidth / 2 - Card()._width, screenHeight - 400)]
+cardWidth = 125
+cardHeight = 182
+handCardXGap = 5
+handCardYGap = 275
+handCardX = [(screenWidth / 2 - cardWidth - handCardXGap), screenWidth / 2]
+handCardY = screenHeight - handCardYGap
 
 screen = pygame.display.set_mode((screenWidth, screenHeight))
 
@@ -47,6 +52,10 @@ class GameController:
         
     def preFlop(self):
         self._dealer.dealPlayerHands(self._players)
+        for player in self._players:
+            if player.isHuman == True:
+                for index, card in enumerate(player._hand):
+                    card.setPos(handCardX[index], handCardY)
 
     def flop(self):
         self._dealer.dealFlop(self._communityCards)
@@ -66,6 +75,11 @@ class GameController:
         self._currentPlayerTurn = 0 # starting player will be at the 0th index
         self._gameTurn += 1 # goes to the next game turn e.g self.flop -> self.turn
         self.gameTurnState[self._gameTurn]() # calls the function from the key-value pair
+
+    def drawCards(self):
+        for player in self._players:
+            for card in player._hand:
+                card.draw()
 
     def gameLoop(self):
         self._dealer.shuffle() # must shuffle at beggining of every game 
@@ -89,7 +103,7 @@ class GameController:
 
             screen.fill(POKERGREEN)
             self._buttons.drawAllButtons()
-            self._players[0]._hand[0].draw()
+            self.drawCards()
             pygame.display.update()
             clock.tick(60) # 60 fps
         
@@ -135,9 +149,11 @@ class Card():
         self._value = value
         self._suit = suit
         self._path = f"cards/{self.getName()}.png"
-        self._width = 125
-        self._height = 182
+        self._width = cardWidth
+        self._height = cardHeight
         self._image = pygame.transform.scale(pygame.image.load(self._path), (125, 182))
+        self._x = None
+        self._y = None
 
     # returns the name of the card in the convention of the card images
     def getName(self):
@@ -145,8 +161,10 @@ class Card():
     
     # size: 500 × 726
     def draw(self):
-        screen.blit(self._image, (400, 400))
+        screen.blit(self._image, (self._x, self._y))
 
+    def setPos(self, x, y):
+        self._x, self._y = x, y
 
 class Deck:
     def __init__(self):
@@ -170,6 +188,7 @@ class Player():
         self._isFolded = False
         self._x = screenWidth / 2
         self._y = screenHeight / 2
+        self.isHuman = True
 
     def fold(self):
         self._isFolded = True

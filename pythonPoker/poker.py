@@ -17,10 +17,20 @@ actionbuttonY = screenHeight - 70 # each action button will share the same heigh
 # ^ both X and Y coords are calculated from screenHeight so that it scales accordingly
 cardWidth = 125
 cardHeight = 182
-handCardXGap = 5
-handCardYGap = 275
+handCardXGap = 5 # horizontal pixel distance between 2 cards
+handCardYGap = 275 # refers to pixel distance from bottom of screen
 handCardX = [(screenWidth / 2 - cardWidth - handCardXGap), screenWidth / 2]
 handCardY = screenHeight - handCardYGap
+
+communityCardXGap = 10
+communityCardYGap = 700
+totalCardsWidth = (5 * cardWidth) + (4 * communityCardXGap)
+startX = (screenWidth - totalCardsWidth) / 2
+communityCardX = [
+    startX + i * (cardWidth + communityCardXGap) 
+    for i in range(0, 5)
+]
+communityCardY = screenHeight - communityCardYGap
 
 screen = pygame.display.set_mode((screenWidth, screenHeight))
 
@@ -56,15 +66,21 @@ class GameController:
             if player.isHuman == True:
                 for index, card in enumerate(player._hand):
                     card.setPos(handCardX[index], handCardY)
-
+        
     def flop(self):
         self._dealer.dealFlop(self._communityCards)
+        for index, card in enumerate(self._communityCards):
+            card.setPos(communityCardX[index], communityCardY)
 
     def turn(self):
         self._dealer.dealTurn(self._communityCards)
+        cardIndex = len(self._communityCards) - 1
+        self._communityCards[-1].setPos(communityCardX[cardIndex], communityCardY)
 
     def river(self):
         self._dealer.dealRiver(self._communityCards)
+        cardIndex = len(self._communityCards) - 1
+        self._communityCards[-1].setPos(communityCardX[cardIndex], communityCardY)
 
     def checkRoundEnd(self):
         # the round is considered ended when each player has made their turn
@@ -80,6 +96,9 @@ class GameController:
         for player in self._players:
             for card in player._hand:
                 card.draw()
+
+        for card in self._communityCards:
+            card.draw()
 
     def gameLoop(self):
         self._dealer.shuffle() # must shuffle at beggining of every game 
@@ -159,7 +178,7 @@ class Card():
     def getName(self):
         return f"{self._value}_of_{self._suit}"
     
-    # size: 500 × 726
+    # original size: 500 × 726
     def draw(self):
         screen.blit(self._image, (self._x, self._y))
 

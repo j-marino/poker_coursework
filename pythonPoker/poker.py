@@ -112,13 +112,17 @@ class GameController:
             card.draw()
     
     def checkSuits(self, mergedCards):
-        count = 0
+        suitCount = {"clubs": 0, "hearts": 0, "spades": 0, "diamonds": 0}
+        for card in mergedCards:
+            suitCount[card._suit] += 1
+        print(suitCount)
 
     def handEvaluator(self):
         for player in self._players:
             mergedHandCommunity = self._communityCards
             for card in player._hand:
                 mergedHandCommunity.append(card)
+            self.checkSuits(mergedHandCommunity)
 
     def gameLoop(self):
         self._dealer.shuffle() # must shuffle at beggining of every game 

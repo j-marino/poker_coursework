@@ -59,7 +59,17 @@ class GameController:
             3: self.river
         } # ^ doesnt start with preFlop since it happens at the beginning of the game and it's much easier to start the index at 0 and begin the 
         # function calls after the preFlop is done
-        
+        self._handValue = {10: "royal flush",
+                           9: "straight flush",
+                           8: "four of a kind",
+                           7: "full house",
+                           6: "flush",
+                           5: "straight",
+                           4: "three of a kind",
+                           3: "two pair",
+                           2: "one pair",
+                           1: "high card"}  
+
     def preFlop(self):
         self._dealer.dealPlayerHands(self._players)
         for player in self._players:
@@ -81,6 +91,7 @@ class GameController:
         self._dealer.dealRiver(self._communityCards)
         cardIndex = len(self._communityCards) - 1
         self._communityCards[-1].setPos(communityCardX[cardIndex], communityCardY)
+        self.handEvaluator()
 
     def checkRoundEnd(self):
         # the round is considered ended when each player has made their turn
@@ -95,10 +106,19 @@ class GameController:
     def drawCards(self):
         for player in self._players:
             for card in player._hand:
-                card.draw()
+                card.draw() # draw to screen not from hand
 
         for card in self._communityCards:
             card.draw()
+    
+    def checkSuits(self, mergedCards):
+        count = 0
+
+    def handEvaluator(self):
+        for player in self._players:
+            mergedHandCommunity = self._communityCards
+            for card in player._hand:
+                mergedHandCommunity.append(card)
 
     def gameLoop(self):
         self._dealer.shuffle() # must shuffle at beggining of every game 

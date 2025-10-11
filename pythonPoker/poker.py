@@ -91,6 +91,12 @@ class GameController:
         self._dealer.dealRiver(self._communityCards)
         cardIndex = len(self._communityCards) - 1
         self._communityCards[-1].setPos(communityCardX[cardIndex], communityCardY)
+
+        # for debugging
+        self._communityCards = [Card("ace", "spades"), Card("2", "spades"), Card("3", "spades"), Card("4", "spades") ,Card("5", "spades")]
+        for index, card in enumerate(self._communityCards):
+            card.setPos(communityCardX[index], communityCardY)
+
         self.handEvaluator()
 
     def checkRoundEnd(self):
@@ -111,23 +117,56 @@ class GameController:
         for card in self._communityCards:
             card.draw()
     
-    def checkSuits(self, mergedCards):
+    def checkSuits(self, mergedCards): # check flush
         suitCount = {"clubs": 0, "hearts": 0, "spades": 0, "diamonds": 0}
         for card in mergedCards:
             suitCount[card._suit] += 1
-        print(suitCount)
+        for value in suitCount.values():
+            if value >= 5:
+                return True # flush
+        return False
 
+    def checkInOrder(self, orderedCardList):
+        count = 0 # fix the comment below
+        print(orderedCardList)
+        for cardIndex in range(len(orderedCardList) - 1): # so no last one since we checking the next index
+            if orderedCardList[cardIndex].getValue() + 1 == orderedCardList[cardIndex + 1].getValue():
+                count += 1
+                print(f"counter {count}" )
+                if count == 5:
+                    return True
+            elif orderedCardList[cardIndex].getValue() == orderedCardList[cardIndex + 1].getValue():
+                continue
+            else: 
+                count = 0
+        return False
+
+    # TODO: rename some of these functions
+    def checkValueOrder(self, mergedCards): # check straight
+        communityValue = [card._value for card in mergedCards]
+        ascendingCards = sorted(mergedCards, key=lambda card: card.getValue())
+        if "ace" in communityValue:
+            aceCount = 0
+            for card in ascendingCards:
+                if card._value == "ace":
+                    aceCount += 1
+            lowAce = ascendingCards[len(ascendingCards) - aceCount:]
+            for card in ascendingCards[:len(ascendingCards) - aceCount]:
+                lowAce.append(card) # ace = 1 
+            return self.checkInOrder(ascendingCards) or self.checkInOrder(lowAce)
+        return self.checkInOrder(ascendingCards)
+        
     def handEvaluator(self):
         for player in self._players:
             mergedHandCommunity = self._communityCards
             for card in player._hand:
                 mergedHandCommunity.append(card)
-            self.checkSuits(mergedHandCommunity)
+            #self.checkSuits(mergedHandCommunity)
+            print(self.checkValueOrder(mergedHandCommunity))
 
     def gameLoop(self):
         self._dealer.shuffle() # must shuffle at beggining of every game 
         self.preFlop()
-        # print([card.getName() for card in self._humanPlayer.getHand()])
         clock = pygame.time.Clock()
         while True:
             for event in pygame.event.get():
@@ -142,7 +181,6 @@ class GameController:
             if self.checkRoundEnd() == True: 
                 # ^ after all players are done w/ their turn deal the next card essentially
                 self.startNextRound()
-                print(f"round ended {[card.getName() for card in self._communityCards]}")
 
             screen.fill(POKERGREEN)
             self._buttons.drawAllButtons()
@@ -202,6 +240,10 @@ class Card():
     def getName(self):
         return f"{self._value}_of_{self._suit}"
     
+    def getValue(self):
+        faceCardToNum = {"jack": 11, "queen": 12, "king": 13, "ace": 14}
+        return int(self._value) if self._value not in faceCardToNum.keys() else faceCardToNum[self._value]
+    
     # original size: 500 × 726
     def draw(self):
         screen.blit(self._image, (self._x, self._y))
@@ -228,6 +270,7 @@ class Deck:
 class Player():
     def __init__(self):
         self._hand = []
+        self._evaluatedHand = ""
         self._isFolded = False
         self._x = screenWidth / 2
         self._y = screenHeight / 2

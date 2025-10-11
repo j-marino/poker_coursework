@@ -59,16 +59,16 @@ class GameController:
             3: self.river
         } # ^ doesnt start with preFlop since it happens at the beginning of the game and it's much easier to start the index at 0 and begin the 
         # function calls after the preFlop is done
-        self._handValue = {10: "royal flush",
-                           9: "straight flush",
-                           8: "four of a kind",
-                           7: "full house",
-                           6: "flush",
-                           5: "straight",
-                           4: "three of a kind",
-                           3: "two pair",
-                           2: "one pair",
-                           1: "high card"}  
+        self._handValue = {"royal flush": 10,
+                        "straight flush": 9,
+                        "four of a kind": 8,
+                        "full house": 7,
+                        "flush": 6,
+                        "straight": 5,
+                        "three of a kind": 4,
+                        "two pair": 3,
+                        "one pair": 2,
+                        "high card": 1}
 
     def preFlop(self):
         self._dealer.dealPlayerHands(self._players)
@@ -93,11 +93,15 @@ class GameController:
         self._communityCards[-1].setPos(communityCardX[cardIndex], communityCardY)
 
         # for debugging
-        self._communityCards = [Card("ace", "spades"), Card("2", "spades"), Card("3", "spades"), Card("4", "spades") ,Card("5", "spades")]
+        self._communityCards = [Card("2", "clubs"), Card("2", "spades"), Card("3", "hearts"), Card("3", "diamonds") ,Card("7", "spades")]
         for index, card in enumerate(self._communityCards):
             card.setPos(communityCardX[index], communityCardY)
 
-        self.handEvaluator()
+        self._players[0]._hand = [Card("8", "spades"), Card("3", "spades")]
+        for index, card in enumerate(self._players[0]._hand):
+                    card.setPos(handCardX[index], handCardY)
+
+        self.evaluatePlayerHands()
 
     def checkRoundEnd(self):
         # the round is considered ended when each player has made their turn
@@ -117,7 +121,7 @@ class GameController:
         for card in self._communityCards:
             card.draw()
     
-    def checkSuits(self, mergedCards): # check flush
+    def hasFlush(self, mergedCards): # check flush
         suitCount = {"clubs": 0, "hearts": 0, "spades": 0, "diamonds": 0}
         for card in mergedCards:
             suitCount[card._suit] += 1
@@ -126,25 +130,31 @@ class GameController:
                 return True # flush
         return False
 
-    def checkInOrder(self, orderedCardList):
-        count = 0 # fix the comment below
-        print(orderedCardList)
+    def hasConsecutiveSequence(self, orderedCardList, isLowAce):
+        count = 1 
         for cardIndex in range(len(orderedCardList) - 1): # so no last one since we checking the next index
-            if orderedCardList[cardIndex].getValue() + 1 == orderedCardList[cardIndex + 1].getValue():
+            currentCardIntValue = orderedCardList[cardIndex].getIntValue()
+            nextCardIntValue = orderedCardList[cardIndex + 1].getIntValue()
+            currentCardStrValue = orderedCardList[cardIndex]._value
+            nextCardStrValue = orderedCardList[cardIndex + 1]._value
+            if currentCardStrValue == "ace" and isLowAce == True:
+                currentCardIntValue = 1
+            if nextCardStrValue == "ace" and isLowAce == True:
+                nextCardIntValue = 1
+            if currentCardIntValue + 1 == nextCardIntValue:
                 count += 1
-                print(f"counter {count}" )
                 if count == 5:
                     return True
-            elif orderedCardList[cardIndex].getValue() == orderedCardList[cardIndex + 1].getValue():
+            elif currentCardIntValue == nextCardIntValue:
                 continue
             else: 
-                count = 0
+                count = 1
         return False
 
     # TODO: rename some of these functions
-    def checkValueOrder(self, mergedCards): # check straight
+    def hasStraight(self, mergedCards): # check straight
         communityValue = [card._value for card in mergedCards]
-        ascendingCards = sorted(mergedCards, key=lambda card: card.getValue())
+        ascendingCards = sorted(mergedCards, key=lambda card: card.getIntValue())
         if "ace" in communityValue:
             aceCount = 0
             for card in ascendingCards:
@@ -153,17 +163,39 @@ class GameController:
             lowAce = ascendingCards[len(ascendingCards) - aceCount:]
             for card in ascendingCards[:len(ascendingCards) - aceCount]:
                 lowAce.append(card) # ace = 1 
-            return self.checkInOrder(ascendingCards) or self.checkInOrder(lowAce)
-        return self.checkInOrder(ascendingCards)
+            return self.hasConsecutiveSequence(ascendingCards, isLowAce=False) or self.hasConsecutiveSequence(lowAce, isLowAce=True)
+        return self.hasConsecutiveSequence(ascendingCards, isLowAce=False)
+    
+    def sumValueCount(self, mergedCards):
+        valueCount = {}
+        for card in mergedCards:
+            if card._value not in valueCount:
+                valueCount[card._value] = 1
+            else:
+                valueCount[card._value] += 1
+        return valueCount
+    
+    def hasXOfAKind(self, mergedCards, matchingValue):
+        for num in self.sumValueCount(mergedCards).values():
+            if num == matchingValue:
+                return True
+        return False
         
-    def handEvaluator(self):
+    def evaluatePlayerHands(self): # must check if works with multiple players -> for prototype 2
         for player in self._players:
             mergedHandCommunity = self._communityCards
             for card in player._hand:
                 mergedHandCommunity.append(card)
-            #self.checkSuits(mergedHandCommunity)
-            print(self.checkValueOrder(mergedHandCommunity))
-
+    
+            # royal flush needs to be checked first
+            if self.hasFlush(mergedHandCommunity) and self.hasStraight(mergedHandCommunity):
+                player._evaluatedHand = "straight flush"
+            if self.hasXOfAKind(mergedHandCommunity, 4): # 4 of a kind
+                player._evaluatedHand = "four of a kind"
+            if self.hasXOfAKind(mergedHandCommunity, 3) and self.hasXOfAKind(mergedHandCommunity, 2):
+                player._evaluatedHand = "full house"
+                print("full house!")
+            
     def gameLoop(self):
         self._dealer.shuffle() # must shuffle at beggining of every game 
         self.preFlop()
@@ -240,7 +272,7 @@ class Card():
     def getName(self):
         return f"{self._value}_of_{self._suit}"
     
-    def getValue(self):
+    def getIntValue(self):
         faceCardToNum = {"jack": 11, "queen": 12, "king": 13, "ace": 14}
         return int(self._value) if self._value not in faceCardToNum.keys() else faceCardToNum[self._value]
     

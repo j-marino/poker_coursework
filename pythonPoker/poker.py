@@ -22,8 +22,8 @@ handCardYGap = 275 # refers to pixel distance from bottom of screen
 handCardX = [(screenWidth / 2 - cardWidth - handCardXGap), screenWidth / 2]
 handCardY = screenHeight - handCardYGap
 
-communityCardXGap = 10
-communityCardYGap = 700
+communityCardXGap = 10 # the horizontal pixel distance between each community card
+communityCardYGap = screenHeight * (7/10) # vertical pixel distance from the bottom of the screen
 totalCardsWidth = (5 * cardWidth) + (4 * communityCardXGap)
 startX = (screenWidth - totalCardsWidth) / 2
 communityCardX = [
@@ -59,6 +59,7 @@ class GameController:
             3: self.river
         } # ^ doesnt start with preFlop since it happens at the beginning of the game and it's much easier to start the index at 0 and begin the 
         # function calls after the preFlop is done
+<<<<<<< Updated upstream
         self._handValue = {10: "royal flush",
                            9: "straight flush",
                            8: "four of a kind",
@@ -69,28 +70,42 @@ class GameController:
                            3: "two pair",
                            2: "one pair",
                            1: "high card"}  
+=======
+>>>>>>> Stashed changes
 
     def preFlop(self):
+        # deals each player their hand -> then gives the cards their coordinates on the screen
         self._dealer.dealPlayerHands(self._players)
         for player in self._players:
-            if player.isHuman == True:
+            if player.isHuman == True: # human player will have their cards visible 
                 for index, card in enumerate(player._hand):
+                    # this loop gets the index of the card in the player hand#
+                    # then at that same index in the handCardX list, that x-coordinate is given
                     card.setPos(handCardX[index], handCardY)
         
     def flop(self):
+        # 3 cards are dealt from the deck and added to the GameController's self._communityCard list
         self._dealer.dealFlop(self._communityCards)
         for index, card in enumerate(self._communityCards):
+            # assigns the community card x-coordinate according to its index in the community card list
             card.setPos(communityCardX[index], communityCardY)
 
     def turn(self):
+        # deal 1 community card from the deck and add to communityCard list
         self._dealer.dealTurn(self._communityCards)
         cardIndex = len(self._communityCards) - 1
+        # ^ this is always the 4th community card but its index is 3
+        # this index is used to assign the value at the 3rd index of the list of community card x-coords
         self._communityCards[-1].setPos(communityCardX[cardIndex], communityCardY)
+        # the card has just been added so [-1] just allows me to access this newly added card
 
+    # this method looks the same as the turn() method it functionally is, except at the end of this method another method will be called
+    # the called method will evaluate the best hand that everyone has from merging the community cards and each player's respective cards
     def river(self):
         self._dealer.dealRiver(self._communityCards)
         cardIndex = len(self._communityCards) - 1
         self._communityCards[-1].setPos(communityCardX[cardIndex], communityCardY)
+<<<<<<< Updated upstream
 
         # for debugging
         self._communityCards = [Card("ace", "spades"), Card("2", "spades"), Card("3", "spades"), Card("4", "spades") ,Card("5", "spades")]
@@ -98,6 +113,9 @@ class GameController:
             card.setPos(communityCardX[index], communityCardY)
 
         self.handEvaluator()
+=======
+        # handEvaluator() method called here -> will be done in prototype 2 
+>>>>>>> Stashed changes
 
     def checkRoundEnd(self):
         # the round is considered ended when each player has made their turn
@@ -110,12 +128,14 @@ class GameController:
         self.gameTurnState[self._gameTurn]() # calls the function from the key-value pair
 
     def drawCards(self):
+        # in this method draw refers to putting the card image on screen, not drawing from deck
         for player in self._players:
             for card in player._hand:
-                card.draw() # draw to screen not from hand
+                card.draw() 
 
         for card in self._communityCards:
             card.draw()
+<<<<<<< Updated upstream
     
     def checkSuits(self, mergedCards): # check flush
         suitCount = {"clubs": 0, "hearts": 0, "spades": 0, "diamonds": 0}
@@ -164,6 +184,9 @@ class GameController:
             #self.checkSuits(mergedHandCommunity)
             print(self.checkValueOrder(mergedHandCommunity))
 
+=======
+            
+>>>>>>> Stashed changes
     def gameLoop(self):
         self._dealer.shuffle() # must shuffle at beggining of every game 
         self.preFlop()
@@ -177,9 +200,10 @@ class GameController:
                         if self._buttons.checkButtonClicked() == True: # loops over all buttons to see if one was clicked
                             self._currentPlayerTurn += 1
                             # the HUMAN player's turn is finished after a button is clicked
+                            # so this variable can be incremented by one so the next player's turn will start
 
             if self.checkRoundEnd() == True: 
-                # ^ after all players are done w/ their turn deal the next card essentially
+                # ^ after all players are done w/ their turn deal the next card
                 self.startNextRound()
 
             screen.fill(POKERGREEN)
@@ -233,6 +257,8 @@ class Card():
         self._width = cardWidth
         self._height = cardHeight
         self._image = pygame.transform.scale(pygame.image.load(self._path), (125, 182))
+        # ^ each card has its according image and the image is scaled so that the original aspect ratio is kept
+        # original size: 500 × 726
         self._x = None
         self._y = None
 
@@ -244,7 +270,6 @@ class Card():
         faceCardToNum = {"jack": 11, "queen": 12, "king": 13, "ace": 14}
         return int(self._value) if self._value not in faceCardToNum.keys() else faceCardToNum[self._value]
     
-    # original size: 500 × 726
     def draw(self):
         screen.blit(self._image, (self._x, self._y))
 
@@ -280,7 +305,7 @@ class Player():
         self._isFolded = True
 
     def check(self): # skips player turn, if previous turn was check or nothing
-        print("I CHECKED") # debugging
+        print("I CHECKED") # debugging: for prototype 1 only
         pass
 
     def giveCard(self, card):
@@ -329,7 +354,7 @@ class ButtonManager:
 
     def drawAllButtons(self):
         for buttonName in self._buttons:
-            self._buttons[buttonName].drawButton()
+            self._buttons[buttonName].drawButton() # accesses the the Button() object value in the dict
 
 game = GameController()
 game.gameLoop()

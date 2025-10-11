@@ -4,7 +4,15 @@ import random
 pygame.init()
 pygame.font.init()
 font = pygame.font.SysFont("Consolas", 35)
+<<<<<<< Updated upstream
+<<<<<<< Updated upstream
 screenWidth, screenHeight = 1500, 900
+=======
+screenWidth, screenHeight = 1200, 700
+>>>>>>> Stashed changes
+=======
+screenWidth, screenHeight = 1200, 700
+>>>>>>> Stashed changes
 POKERGREEN = pygame.Color("#3c7257")
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -12,6 +20,8 @@ actionButtonWidth, actionButtonHeight = 120, 40
 # calculate the button x coordinate so that they are mathematically equally spaced across the screen
 # since its going to be 3 buttons displayed at a time the x coordinates are decided by multipying the screen width by 0.25 * n
 # half button width is subtracted since it is draw from the top left corner.
+<<<<<<< Updated upstream
+<<<<<<< Updated upstream
 actionButtonX = {"check": (int(screenWidth * 0.25)) - actionButtonWidth / 2, "fold": (int(screenWidth * 0.50)) - actionButtonWidth / 2}
 actionbuttonY = screenHeight - 70 # each action button will share the same height
 # ^ both X and Y coords are calculated from screenHeight so that it scales accordingly
@@ -32,6 +42,16 @@ communityCardX = [
 ]
 communityCardY = screenHeight - communityCardYGap
 
+=======
+actionButtonPosX = {"check": (int(screenWidth * 0.25)) - actionButtonWidth / 2, "fold": (int(screenWidth * 0.50)) - actionButtonWidth / 2}
+actionButtonPosY = screenHeight - 100 # each action button will share the same height
+# ^ both X and Y coords are calculated from screenHeight so that it scales accordingly
+>>>>>>> Stashed changes
+=======
+actionButtonPosX = {"check": (int(screenWidth * 0.25)) - actionButtonWidth / 2, "fold": (int(screenWidth * 0.50)) - actionButtonWidth / 2}
+actionButtonPosY = screenHeight - 100 # each action button will share the same height
+# ^ both X and Y coords are calculated from screenHeight so that it scales accordingly
+>>>>>>> Stashed changes
 screen = pygame.display.set_mode((screenWidth, screenHeight))
 
 class GameController:
@@ -41,13 +61,31 @@ class GameController:
         self._dealer = Dealer() # deck created in Dealer class
         self._currentPlayerTurn = 0
         self._gameTurn = 0
+<<<<<<< Updated upstream
+<<<<<<< Updated upstream
         humanPlayer = Player() # only 1 human in this poker game
+=======
+        humanPlayer = HumanPlayer() # only 1 human in this poker game
+>>>>>>> Stashed changes
+=======
+        humanPlayer = HumanPlayer() # only 1 human in this poker game
+>>>>>>> Stashed changes
         self._players.append(humanPlayer)
         self._buttons = ButtonManager({
             # key = buttonname, value = Button object
             # the action of the button e,g, humanPlayer.check comes from the previously created humanPlayer which is why humanPlayer is created before this
+<<<<<<< Updated upstream
+<<<<<<< Updated upstream
             "check": Button(actionButtonX["check"], actionbuttonY, actionButtonWidth, actionButtonHeight, humanPlayer.check, "check", WHITE),
             "fold": Button(actionButtonX["fold"], actionbuttonY, actionButtonWidth, actionButtonHeight, humanPlayer.fold, "fold", WHITE),
+=======
+            "check": Button(actionButtonPosX["check"], actionButtonPosY, actionButtonWidth, actionButtonHeight, humanPlayer.check, "check", WHITE),
+            "fold": Button(actionButtonPosX["fold"], actionButtonPosY, actionButtonWidth, actionButtonHeight, humanPlayer.fold, "fold", WHITE),
+>>>>>>> Stashed changes
+=======
+            "check": Button(actionButtonPosX["check"], actionButtonPosY, actionButtonWidth, actionButtonHeight, humanPlayer.check, "check", WHITE),
+            "fold": Button(actionButtonPosX["fold"], actionButtonPosY, actionButtonWidth, actionButtonHeight, humanPlayer.fold, "fold", WHITE),
+>>>>>>> Stashed changes
         }) # buttonManager takes the buttons as dictionary so it is easy to link to button
         # numbers not used since it would get confusing as which button i am refering to
 
@@ -60,6 +98,8 @@ class GameController:
         } # ^ doesnt start with preFlop since it happens at the beginning of the game and it's much easier to start the index at 0 and begin the 
         # function calls after the preFlop is done
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+<<<<<<< Updated upstream
         self._handValue = {10: "royal flush",
                            9: "straight flush",
                            8: "four of a kind",
@@ -71,6 +111,54 @@ class GameController:
                            2: "one pair",
                            1: "high card"}  
 =======
+>>>>>>> Stashed changes
+=======
+        
+    def preFlop(self):
+        self._dealer.dealPlayerHands(self._players)
+=======
+        
+    def preFlop(self):
+        self._dealer.dealPlayerHands(self._players)
+
+    def flop(self):
+        self._dealer.dealFlop(self._communityCards)
+
+    def turn(self):
+        self._dealer.dealTurn(self._communityCards)
+
+    def river(self):
+        self._dealer.dealRiver(self._communityCards)
+
+    def checkRoundEnd(self):
+        # the round is considered ended when each player has made their turn
+        # this condition will change when betting, i.e. essential feature balance system is added.
+        return self._currentPlayerTurn > len(self._players) - 1
+    
+    def startNextRound(self):
+        self._currentPlayerTurn = 0 # starting player will be at the 0th index
+        self._gameTurn += 1 # goes to the next game turn e.g self.flop -> self.turn
+        self.gameTurnState[self._gameTurn]() # calls the function from the key-value pair
+>>>>>>> Stashed changes
+
+    def flop(self):
+        self._dealer.dealFlop(self._communityCards)
+
+    def turn(self):
+        self._dealer.dealTurn(self._communityCards)
+
+    def river(self):
+        self._dealer.dealRiver(self._communityCards)
+
+    def checkRoundEnd(self):
+        # the round is considered ended when each player has made their turn
+        # this condition will change when betting, i.e. essential feature balance system is added.
+        return self._currentPlayerTurn > len(self._players) - 1
+    
+    def startNextRound(self):
+        self._currentPlayerTurn = 0 # starting player will be at the 0th index
+        self._gameTurn += 1 # goes to the next game turn e.g self.flop -> self.turn
+        self.gameTurnState[self._gameTurn]() # calls the function from the key-value pair
 >>>>>>> Stashed changes
 
     def preFlop(self):
@@ -190,6 +278,14 @@ class GameController:
     def gameLoop(self):
         self._dealer.shuffle() # must shuffle at beggining of every game 
         self.preFlop()
+<<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
+        # print([card.getName() for card in self._humanPlayer.getHand()])
+>>>>>>> Stashed changes
+=======
+        # print([card.getName() for card in self._humanPlayer.getHand()])
+>>>>>>> Stashed changes
         clock = pygame.time.Clock()
         while True:
             for event in pygame.event.get():
@@ -200,6 +296,8 @@ class GameController:
                         if self._buttons.checkButtonClicked() == True: # loops over all buttons to see if one was clicked
                             self._currentPlayerTurn += 1
                             # the HUMAN player's turn is finished after a button is clicked
+<<<<<<< Updated upstream
+<<<<<<< Updated upstream
                             # so this variable can be incremented by one so the next player's turn will start
 
             if self.checkRoundEnd() == True: 
@@ -212,6 +310,30 @@ class GameController:
             pygame.display.update()
             clock.tick(60) # 60 fps
         
+=======
+
+            if self.checkRoundEnd() == True: 
+                # ^ after all players are done w/ their turn deal the next card essentially
+                self.startNextRound()
+                print(f"round ended {[card.getName() for card in self._communityCards]}")
+
+            screen.fill(POKERGREEN)
+            self._buttons.drawAllButtons()
+            pygame.display.update()
+            clock.tick(60) # 60 fps
+>>>>>>> Stashed changes
+=======
+
+            if self.checkRoundEnd() == True: 
+                # ^ after all players are done w/ their turn deal the next card essentially
+                self.startNextRound()
+                print(f"round ended {[card.getName() for card in self._communityCards]}")
+
+            screen.fill(POKERGREEN)
+            self._buttons.drawAllButtons()
+            pygame.display.update()
+            clock.tick(60) # 60 fps
+>>>>>>> Stashed changes
 
 class Dealer:
     def __init__(self):
@@ -305,7 +427,15 @@ class Player():
         self._isFolded = True
 
     def check(self): # skips player turn, if previous turn was check or nothing
+<<<<<<< Updated upstream
+<<<<<<< Updated upstream
         print("I CHECKED") # debugging: for prototype 1 only
+=======
+        print("I CHECKED")
+>>>>>>> Stashed changes
+=======
+        print("I CHECKED")
+>>>>>>> Stashed changes
         pass
 
     def giveCard(self, card):
@@ -315,6 +445,20 @@ class Player():
         playerList.append(self)
 
 
+<<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
+=======
+>>>>>>> Stashed changes
+class HumanPlayer(Player): # inheritance
+    def __init__(self):
+        super().__init__()
+
+
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
+>>>>>>> Stashed changes
 class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
     def __init__(self, x, y, width, height, action, text, color):
         super().__init__(x, y, width, height)
@@ -345,6 +489,8 @@ class ButtonManager:
         self._buttons = buttons # buttons is a dict()
 
     def checkButtonClicked(self):
+<<<<<<< Updated upstream
+<<<<<<< Updated upstream
         clicked = False # starts false and remains unchanged if a button was not pressed
         for buttonName in self._buttons: # loops over dict() keys
             if self._buttons[buttonName].wasClicked() == True:
@@ -355,6 +501,22 @@ class ButtonManager:
     def drawAllButtons(self):
         for buttonName in self._buttons:
             self._buttons[buttonName].drawButton() # accesses the the Button() object value in the dict
+=======
+=======
+>>>>>>> Stashed changes
+        clicked = False
+        for buttonName in self._buttons:
+            if self._buttons[buttonName].wasClicked() == True:
+                clicked = True
+        return clicked
+
+    def drawAllButtons(self):
+        for buttonName in self._buttons:
+            self._buttons[buttonName].drawButton()
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
+>>>>>>> Stashed changes
 
 game = GameController()
 game.gameLoop()

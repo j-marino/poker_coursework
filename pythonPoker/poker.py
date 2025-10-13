@@ -198,10 +198,10 @@ class Card():
         faceCardToNum = {"jack": 11, "queen": 12, "king": 13, "ace": 14}
         return int(self._value) if self._value not in faceCardToNum.keys() else faceCardToNum[self._value]
     
-    def draw(self):
+    def draw(self): # puts the card image on screen
         screen.blit(self._image, (self._x, self._y))
 
-    def setPos(self, x, y):
+    def setPos(self, x, y): # assigns the position of the image on the screen
         self._x, self._y = x, y
 
 class Deck:

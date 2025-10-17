@@ -225,8 +225,6 @@ class Player():
         self._hand = []
         self._evaluatedHand = ""
         self._isFolded = False
-        self._x = screenWidth / 2
-        self._y = screenHeight / 2
         self.isHuman = True
 
     def fold(self):
@@ -240,7 +238,7 @@ class Player():
         self._hand.append(card) # append Card object to hand attribute
     
     def addToGame(self, playerList):
-        playerList.append(self)
+        playerList.append(self) 
 
 
 class Button(pygame.Rect): # uses the pre-made Rect class from pygame library

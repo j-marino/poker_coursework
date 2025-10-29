@@ -4,7 +4,7 @@ import random
 pygame.init()
 pygame.font.init()
 font = pygame.font.SysFont("Consolas", 35)
-screenWidth, screenHeight = 1500, 900
+screenWidth, screenHeight = 1800, 1000
 POKERGREEN = pygame.Color("#3c7257")
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -22,14 +22,16 @@ handCardYGap = 275 # refers to pixel distance from bottom of screen
 handCardX = [(screenWidth / 2 - cardWidth - handCardXGap), screenWidth / 2]
 handCardY = screenHeight - handCardYGap
 
-communityCardXGap = 10
-communityCardYGap = 700
-totalCardsWidth = (5 * cardWidth) + (4 * communityCardXGap)
-startX = (screenWidth - totalCardsWidth) / 2
+communityCardXGap = 10 # the horizontal pixel distance between each community card
+communityCardYGap = (screenHeight / 2) + (cardHeight / 2) # vertical pixel distance from the bottom of the screen
+# ^ scales with screen height due to screen dimensions possibly changing in future prototypes
+totalCardsWidth = (5 * cardWidth) + (4 * communityCardXGap) # 4 gaps in between 5 cards
+startX = (screenWidth - totalCardsWidth) / 2  
+# ^  where the left most community card wil lbe
 communityCardX = [
     startX + i * (cardWidth + communityCardXGap) 
     for i in range(0, 5)
-]
+] # list comprehension - > evenly spaced x-coords for community cards
 communityCardY = screenHeight - communityCardYGap
 
 screen = pygame.display.set_mode((screenWidth, screenHeight))
@@ -71,33 +73,45 @@ class GameController:
                         "high card": 1}
 
     def preFlop(self):
-        self._dealer.dealPlayerHands(self._players)
-        for player in self._players:
-            if player.isHuman == True:
-                for index, card in enumerate(player._hand):
-                    card.setPos(handCardX[index], handCardY)
+            # deals each player their hand -> then gives the cards their coordinates on the screen
+            self._dealer.dealPlayerHands(self._players)
+            for player in self._players:
+                if player.isHuman == True: # human player will have their cards visible 
+                    for index, card in enumerate(player._hand):
+                        # this loop gets the index of the card in the player hand#
+                        # then at that same index in the handCardX list, that x-coordinate is given
+                        card.setPos(handCardX[index], handCardY)
         
     def flop(self):
+        # 3 cards are dealt from the deck and added to the GameController's self._communityCard list
         self._dealer.dealFlop(self._communityCards)
         for index, card in enumerate(self._communityCards):
+            # assigns the community card x-coordinate according to its index in the community card list
             card.setPos(communityCardX[index], communityCardY)
 
     def turn(self):
+        # deal 1 community card from the deck and add to communityCard list
         self._dealer.dealTurn(self._communityCards)
         cardIndex = len(self._communityCards) - 1
+        # ^ this is always the 4th community card but its index is 3
+        # this index is used to assign the value at the 3rd index of the list of community card x-coords
         self._communityCards[-1].setPos(communityCardX[cardIndex], communityCardY)
+        # the card has just been added so [-1] just allows me to access this newly added card
 
+    # this method looks the same as the turn() method it functionally is, except at the end of this method another method will be called
+    # the called method will evaluate the best hand that everyone has from merging the community cards and each player's respective cards
     def river(self):
         self._dealer.dealRiver(self._communityCards)
         cardIndex = len(self._communityCards) - 1
         self._communityCards[-1].setPos(communityCardX[cardIndex], communityCardY)
+        # handEvaluator() method called here -> will be done in prototype 2 
 
         # for debugging
-        self._communityCards = [Card("2", "clubs"), Card("2", "spades"), Card("3", "hearts"), Card("3", "diamonds") ,Card("7", "spades")]
+        self._communityCards = [Card("2", "spades"), Card("3", "spades"), Card("4", "spades"), Card("5", "spades") ,Card("7", "spades")]
         for index, card in enumerate(self._communityCards):
             card.setPos(communityCardX[index], communityCardY)
 
-        self._players[0]._hand = [Card("8", "spades"), Card("3", "spades")]
+        self._players[0]._hand = [Card("8", "diamonds"), Card("6", "diamonds")]
         for index, card in enumerate(self._players[0]._hand):
                     card.setPos(handCardX[index], handCardY)
 
@@ -186,15 +200,31 @@ class GameController:
             mergedHandCommunity = self._communityCards
             for card in player._hand:
                 mergedHandCommunity.append(card)
-    
+    #        self._handValue = {"royal flush": 10,
+    #                   "straight flush": 9,
+    #                   "four of a kind": 8,
+    #                   "full house": 7,
+    #                   "flush": 6,
+    #                   "straight": 5,
+    #                  "three of a kind": 4,
+    #                   "two pair": 3,
+    #                   "one pair": 2,
+    #                    "high card": 1}
             # royal flush needs to be checked first
             if self.hasFlush(mergedHandCommunity) and self.hasStraight(mergedHandCommunity):
                 player._evaluatedHand = "straight flush"
-            if self.hasXOfAKind(mergedHandCommunity, 4): # 4 of a kind
+            elif self.hasXOfAKind(mergedHandCommunity, 4): # 4 of a kind
                 player._evaluatedHand = "four of a kind"
-            if self.hasXOfAKind(mergedHandCommunity, 3) and self.hasXOfAKind(mergedHandCommunity, 2):
+            elif self.hasXOfAKind(mergedHandCommunity, 3) and self.hasXOfAKind(mergedHandCommunity, 2):
                 player._evaluatedHand = "full house"
                 print("full house!")
+            elif self.hasFlush(mergedHandCommunity):
+                player._evaluatedHand = "flush"
+                print("flush")
+            elif self.hasStraight(mergedHandCommunity):
+                player._evaluatedHand = "straight"
+                print("straight")
+            
             
     def gameLoop(self):
         self._dealer.shuffle() # must shuffle at beggining of every game 
@@ -226,7 +256,10 @@ class Dealer:
         self._deck = Deck().createDeck() # list of 52 Card objects, in order
 
     def dealCard(self):
-        return self._deck.pop()
+        if len(self._deck) > 1:
+            return self._deck.pop()
+        else:
+            print("deck empty")
         # .pop() used to mimic how dealing is actually done, by removing the top card in the deck 
     
     def shuffle(self):
@@ -264,7 +297,7 @@ class Card():
         self._path = f"cards/{self.getName()}.png"
         self._width = cardWidth
         self._height = cardHeight
-        self._image = pygame.transform.scale(pygame.image.load(self._path), (125, 182))
+        self._image = pygame.transform.scale(pygame.image.load(self._path), (self._width , self._height))
         self._x = None
         self._y = None
 
@@ -309,6 +342,7 @@ class Player():
         self.isHuman = True
 
     def fold(self):
+        print("I FOLDED")
         self._isFolded = True
 
     def check(self): # skips player turn, if previous turn was check or nothing
@@ -361,7 +395,7 @@ class ButtonManager:
 
     def drawAllButtons(self):
         for buttonName in self._buttons:
-            self._buttons[buttonName].drawButton()
+            self._buttons[buttonName].drawButton() # accesses the the Button() object value in the dict
 
 game = GameController()
 game.gameLoop()

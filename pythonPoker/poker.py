@@ -4,7 +4,7 @@ import random
 pygame.init()
 pygame.font.init()
 font = pygame.font.SysFont("Consolas", 35)
-screenWidth, screenHeight = 1500, 900
+screenWidth, screenHeight = 1800, 1000
 POKERGREEN = pygame.Color("#3c7257")
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -23,7 +23,7 @@ handCardX = [(screenWidth / 2 - cardWidth - handCardXGap), screenWidth / 2]
 handCardY = screenHeight - handCardYGap
 
 communityCardXGap = 10 # the horizontal pixel distance between each community card
-communityCardYGap = screenHeight * (7/10) # vertical pixel distance from the bottom of the screen
+communityCardYGap = (screenHeight / 2) + (cardHeight / 2) # vertical pixel distance from the bottom of the screen
 # ^ scales with screen height due to screen dimensions possibly changing in future prototypes
 totalCardsWidth = (5 * cardWidth) + (4 * communityCardXGap) # 4 gaps in between 5 cards
 startX = (screenWidth - totalCardsWidth) / 2  
@@ -146,7 +146,10 @@ class Dealer:
         self._deck = Deck().createDeck() # list of 52 Card objects, in order
 
     def dealCard(self):
-        return self._deck.pop()
+        if len(self._deck) > 1:
+            return self._deck.pop()
+        else:
+            print("deck empty")
         # .pop() used to mimic how dealing is actually done, by removing the top card in the deck 
     
     def shuffle(self):
@@ -184,7 +187,7 @@ class Card():
         self._path = f"cards/{self.getName()}.png"
         self._width = cardWidth
         self._height = cardHeight
-        self._image = pygame.transform.scale(pygame.image.load(self._path), (125, 182))
+        self._image = pygame.transform.scale(pygame.image.load(self._path), (self._width , self._height))
         # ^ each card has its according image and the image is scaled so that the original aspect ratio is kept
         # original size: 500 × 726
         self._x = None
@@ -230,6 +233,7 @@ class Player():
         self.isHuman = True
 
     def fold(self):
+        print("I FOLDED")
         self._isFolded = True
 
     def check(self): # skips player turn, if previous turn was check or nothing

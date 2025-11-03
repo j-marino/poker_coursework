@@ -44,7 +44,7 @@ class GameController:
         self._currentPlayerTurn = 0
         self._gameTurn = 0
         humanPlayer = Player() # only 1 human in this poker game
-        self._players.append(humanPlayer)
+        humanPlayer.addToGame(self._players)       
         self._buttons = ButtonManager({
             # key = buttonname, value = Button object
             # the action of the button e,g, humanPlayer.check comes from the previously created humanPlayer which is why humanPlayer is created before this
@@ -72,11 +72,37 @@ class GameController:
                         "one pair": 2,
                         "high card": 1}
 
+    def gameLoop(self):
+        AIPlayer1 = AIPlayer("monte")
+        AIPlayer1.addToGame(self._players)
+        self._dealer.shuffle() # must shuffle at beggining of every game 
+        self.preFlop()
+        clock = pygame.time.Clock()
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    exit()
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1: # if left click
+                        if self._buttons.checkButtonClicked() == True: # loops over all buttons to see if one was clicked
+                            self._currentPlayerTurn += 1
+
+            if self.checkRoundEnd() == True: 
+                # ^ after all players are done w/ their turn deal the next card essentially
+                self.startNextRound()
+
+            self.computerAction()
+            screen.fill(POKERGREEN)
+            self._buttons.drawAllButtons()
+            self.drawCards()
+            pygame.display.update()
+            clock.tick(60) # 60 fps
+
     def preFlop(self):
             # deals each player their hand -> then gives the cards their coordinates on the screen
             self._dealer.dealPlayerHands(self._players)
             for player in self._players:
-                if player.isHuman == True: # human player will have their cards visible 
+                if player._isHuman == True: # human player will have their cards visible 
                     for index, card in enumerate(player._hand):
                         # this loop gets the index of the card in the player hand#
                         # then at that same index in the handCardX list, that x-coordinate is given
@@ -107,14 +133,15 @@ class GameController:
         # handEvaluator() method called here -> will be done in prototype 2 
 
         # for debugging
-        self._communityCards = [Card("2", "spades"), Card("3", "spades"), Card("4", "spades"), Card("5", "spades") ,Card("7", "spades")]
+        """
+        self._communityCards = [Card("5", "hearts"), Card("6", "hearts"), Card("7", "hearts"), Card("king", "spades"), Card("2", "spades")]
         for index, card in enumerate(self._communityCards):
             card.setPos(communityCardX[index], communityCardY)
 
-        self._players[0]._hand = [Card("8", "diamonds"), Card("6", "diamonds")]
+        self._players[0]._hand = [Card("9", "hearts"), Card("3", "diamonds")]
         for index, card in enumerate(self._players[0]._hand):
                     card.setPos(handCardX[index], handCardY)
-
+        """
         self.evaluatePlayerHands()
 
     def checkRoundEnd(self):
@@ -122,6 +149,13 @@ class GameController:
         # this condition will change when betting, i.e. essential feature balance system is added.
         return self._currentPlayerTurn > len(self._players) - 1
     
+    def computerAction(self):
+        currentPlayer = self._players[self._currentPlayerTurn]
+        if currentPlayer._isHuman == True: # do not do an AI's turn if waiting for player to press button and do their turn
+            return None # return None for now -> change to something better later?
+        self._currentPlayerTurn += 1
+        currentPlayer.doAction()
+
     def startNextRound(self):
         self._currentPlayerTurn = 0 # starting player will be at the 0th index
         self._gameTurn += 1 # goes to the next game turn e.g self.flop -> self.turn
@@ -130,10 +164,12 @@ class GameController:
     def drawCards(self):
         for player in self._players:
             for card in player._hand:
-                card.draw() # draw to screen not from hand
+                if card._x != None and card._y != None: # was trying to draw AI cards and error 
+                    card.draw() # draw to screen not from hand
 
         for card in self._communityCards:
-            card.draw()
+            if card._x != None and card._y != None:
+                card.draw()
     
     def hasFlush(self, mergedCards): # check flush
         suitCount = {"clubs": 0, "hearts": 0, "spades": 0, "diamonds": 0}
@@ -144,7 +180,7 @@ class GameController:
                 return True # flush
         return False
 
-    def hasConsecutiveSequence(self, orderedCardList, isLowAce):
+    def hasConsecutiveSequence(self, orderedCardList, isLowAce, checkStraightFlush):
         count = 1 
         for cardIndex in range(len(orderedCardList) - 1): # so no last one since we checking the next index
             currentCardIntValue = orderedCardList[cardIndex].getIntValue()
@@ -158,7 +194,13 @@ class GameController:
             if currentCardIntValue + 1 == nextCardIntValue:
                 count += 1
                 if count == 5:
-                    return True
+                    if checkStraightFlush == False:
+                        return True
+                    if checkStraightFlush == True:
+                        if self.hasFlush(orderedCardList[cardIndex - 3: cardIndex + 2]):
+                            return True
+                        else:
+                            return False
             elif currentCardIntValue == nextCardIntValue:
                 continue
             else: 
@@ -166,7 +208,7 @@ class GameController:
         return False
 
     # TODO: rename some of these functions
-    def hasStraight(self, mergedCards): # check straight
+    def hasStraight(self, mergedCards, checkStraightFlush): # check straight
         communityValue = [card._value for card in mergedCards]
         ascendingCards = sorted(mergedCards, key=lambda card: card.getIntValue())
         if "ace" in communityValue:
@@ -177,8 +219,8 @@ class GameController:
             lowAce = ascendingCards[len(ascendingCards) - aceCount:]
             for card in ascendingCards[:len(ascendingCards) - aceCount]:
                 lowAce.append(card) # ace = 1 
-            return self.hasConsecutiveSequence(ascendingCards, isLowAce=False) or self.hasConsecutiveSequence(lowAce, isLowAce=True)
-        return self.hasConsecutiveSequence(ascendingCards, isLowAce=False)
+            return self.hasConsecutiveSequence(ascendingCards, False, checkStraightFlush) or self.hasConsecutiveSequence(lowAce, True, checkStraightFlush)
+        return self.hasConsecutiveSequence(ascendingCards, False, checkStraightFlush)
     
     def sumValueCount(self, mergedCards):
         valueCount = {}
@@ -194,25 +236,22 @@ class GameController:
             if num == matchingValue:
                 return True
         return False
-        
+    
+    def twoPair(self, mergedCards):
+        twoPairCount = 0
+        for num in self.sumValueCount(mergedCards).values():
+            if num == 2:
+                twoPairCount += 1
+        return twoPairCount == 2
+
     def evaluatePlayerHands(self): # must check if works with multiple players -> for prototype 2
         for player in self._players:
             mergedHandCommunity = self._communityCards
             for card in player._hand:
                 mergedHandCommunity.append(card)
-    #        self._handValue = {"royal flush": 10,
-    #                   "straight flush": 9,
-    #                   "four of a kind": 8,
-    #                   "full house": 7,
-    #                   "flush": 6,
-    #                   "straight": 5,
-    #                  "three of a kind": 4,
-    #                   "two pair": 3,
-    #                   "one pair": 2,
-    #                    "high card": 1}
-            # royal flush needs to be checked first
-            if self.hasFlush(mergedHandCommunity) and self.hasStraight(mergedHandCommunity):
+            if self.hasStraight(mergedHandCommunity, checkStraightFlush=True): # TODO: ROYAL FLUSH BUT MAY JUST KEEP IT AS STRAIGHT FLUSH CUZ WHAT ARE THE ODDS LIKE 1 IN 1 MILLION LOL?
                 player._evaluatedHand = "straight flush"
+                print("straight flush")
             elif self.hasXOfAKind(mergedHandCommunity, 4): # 4 of a kind
                 player._evaluatedHand = "four of a kind"
             elif self.hasXOfAKind(mergedHandCommunity, 3) and self.hasXOfAKind(mergedHandCommunity, 2):
@@ -221,35 +260,22 @@ class GameController:
             elif self.hasFlush(mergedHandCommunity):
                 player._evaluatedHand = "flush"
                 print("flush")
-            elif self.hasStraight(mergedHandCommunity):
+            elif self.hasStraight(mergedHandCommunity, checkStraightFlush=False):
                 player._evaluatedHand = "straight"
                 print("straight")
+            elif self.hasXOfAKind(mergedHandCommunity, 3):
+                player._evaluatedHand = "three of a kind"
+                print("3OAK")
+            elif self.twoPair(mergedHandCommunity):
+                player._evaluatedHand = "two pair"
+                print("2PAIR")
+            elif self.hasXOfAKind(mergedHandCommunity, 2):
+                player._evaluatedHand = "one pair"
+                print("1PAIR")
+            else:
+                player.evaluatedHand = "high card"
+                print("HCARD")
             
-            
-    def gameLoop(self):
-        self._dealer.shuffle() # must shuffle at beggining of every game 
-        self.preFlop()
-        clock = pygame.time.Clock()
-        while True:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    exit()
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == 1: # if left click
-                        if self._buttons.checkButtonClicked() == True: # loops over all buttons to see if one was clicked
-                            self._currentPlayerTurn += 1
-                            # the HUMAN player's turn is finished after a button is clicked
-
-            if self.checkRoundEnd() == True: 
-                # ^ after all players are done w/ their turn deal the next card essentially
-                self.startNextRound()
-
-            screen.fill(POKERGREEN)
-            self._buttons.drawAllButtons()
-            self.drawCards()
-            pygame.display.update()
-            clock.tick(60) # 60 fps
-        
 
 class Dealer:
     def __init__(self):
@@ -332,14 +358,14 @@ class Deck:
         return self._deck 
 
 
-class Player():
+class Player:
     def __init__(self):
         self._hand = []
         self._evaluatedHand = ""
         self._isFolded = False
         self._x = screenWidth / 2
         self._y = screenHeight / 2
-        self.isHuman = True
+        self._isHuman = True
 
     def fold(self):
         print("I FOLDED")
@@ -347,7 +373,6 @@ class Player():
 
     def check(self): # skips player turn, if previous turn was check or nothing
         print("I CHECKED") # debugging
-        pass
 
     def giveCard(self, card):
         self._hand.append(card) # append Card object to hand attribute
@@ -355,6 +380,16 @@ class Player():
     def addToGame(self, playerList):
         playerList.append(self)
 
+
+class AIPlayer(Player):
+    def __init__(self, name):
+        super().__init__()
+        self._name = name
+        self._isHuman = False
+        self._action = self.check # temp action value
+    
+    def doAction(self):
+        return self._action()
 
 class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
     def __init__(self, x, y, width, height, action, text, color):

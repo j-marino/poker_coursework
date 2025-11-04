@@ -1,3 +1,4 @@
+import copy
 import pygame
 import random
 
@@ -90,6 +91,7 @@ class GameController:
             if self.checkRoundEnd() == True: 
                 # ^ after all players are done w/ their turn deal the next card essentially
                 self.startNextRound()
+                #print([card.getName() for card in self._communityCards])
 
             self.computerAction()
             screen.fill(POKERGREEN)
@@ -154,6 +156,7 @@ class GameController:
         if currentPlayer._isHuman == True: # do not do an AI's turn if waiting for player to press button and do their turn
             return None # return None for now -> change to something better later?
         self._currentPlayerTurn += 1
+        currentPlayer.monteCarloSimulation(1000, self._communityCards, self._dealer._deck)
         currentPlayer.doAction()
 
     def startNextRound(self):
@@ -246,7 +249,7 @@ class GameController:
 
     def evaluatePlayerHands(self): # must check if works with multiple players -> for prototype 2
         for player in self._players:
-            mergedHandCommunity = self._communityCards
+            mergedHandCommunity = self._communityCards[:] # use a shallow copy for safety
             for card in player._hand:
                 mergedHandCommunity.append(card)
             if self.hasStraight(mergedHandCommunity, checkStraightFlush=True): # TODO: ROYAL FLUSH BUT MAY JUST KEEP IT AS STRAIGHT FLUSH CUZ WHAT ARE THE ODDS LIKE 1 IN 1 MILLION LOL?
@@ -391,11 +394,14 @@ class AIPlayer(Player):
     def doAction(self):
         return self._action()
     
-    def monteCarloSimulation(self, simulations, communityCards, deck):
-        while len(communityCards) < 5:
-            deck.shuffle()
-            fillerCard = deck.pop()
-            communityCards.append(fillerCard) # complex algo
+    def monteCarloSimulation(self, simulations, communityCards, deck):     
+        """
+        while len(communityCardsCopy) < 5:
+            deckCopy.shuffle()
+            fillerCard = deckCopy.dealCard()
+            communityCardsCopy.append(fillerCard) # complex algo
+        print(len(deckCopy._deck))
+        """
 
 class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
     def __init__(self, x, y, width, height, action, text, color):

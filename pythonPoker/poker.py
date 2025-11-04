@@ -390,6 +390,12 @@ class AIPlayer(Player):
     
     def doAction(self):
         return self._action()
+    
+    def monteCarloSimulation(self, simulations, communityCards, deck):
+        while len(communityCards) < 5:
+            deck.shuffle()
+            fillerCard = deck.pop()
+            communityCards.append(fillerCard) # complex algo
 
 class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
     def __init__(self, x, y, width, height, action, text, color):

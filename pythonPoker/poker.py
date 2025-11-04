@@ -43,7 +43,8 @@ class GameController:
         self._dealer = Dealer() # deck created in Dealer class
         self._currentPlayerTurn = 0
         self._gameTurn = 0
-        self._humanPlayer = Player() # only 1 human in this poker game
+        humanPlayer = Player() # only 1 human in this poker game
+        self._players.append(humanPlayer)
         self._buttons = ButtonManager({
             # key = buttonname, value = Button object
             # the action of the button e,g, humanPlayer.check comes from the previously created humanPlayer which is why humanPlayer is created before this
@@ -115,7 +116,6 @@ class GameController:
             card.draw()
             
     def gameLoop(self):
-        self._players.append(self._humanPlayer)
         self._dealer.shuffle() # must shuffle at beggining of every game 
         self.preFlop()
         clock = pygame.time.Clock()
@@ -146,16 +146,10 @@ class Dealer:
         self._deck = Deck().createDeck() # list of 52 Card objects, in order
 
     def dealCard(self):
-<<<<<<< HEAD
         if len(self._deck) > 1:
             return self._deck.pop()
         else:
             print("deck empty")
-=======
-        if len(self._deck) > 0: # validation -> cannot deal card if the deck is empty
-            return self._deck.pop()
-        return False
->>>>>>> df902794f3fa4c6bf25ebd7d434a0e4c02d31bde
         # .pop() used to mimic how dealing is actually done, by removing the top card in the deck 
     
     def shuffle(self):

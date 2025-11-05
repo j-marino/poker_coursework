@@ -394,7 +394,16 @@ class AIPlayer(Player):
     def doAction(self):
         return self._action()
     
-    def monteCarloSimulation(self, simulations, communityCards, deck):     
+    def monteCarloSimulation(self, simulations, communityCards, deck):  
+        deckCopy = Deck().createDeck()
+        # print(f"{len(deckCopy)}")
+        # print(f"deck {len(deck)}") 
+        
+        communityCardCopy = communityCards[:]
+        communityCardCopy.append("BOBBY")
+        print(f"copy {len(communityCardCopy)}")
+        print(f"real {len(communityCards)}") 
+
         """
         while len(communityCardsCopy) < 5:
             deckCopy.shuffle()

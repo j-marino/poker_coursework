@@ -249,7 +249,7 @@ class GameController:
 
     def evaluatePlayerHands(self): # must check if works with multiple players -> for prototype 2
         for player in self._players:
-            mergedHandCommunity = self._communityCards[:] # use a shallow copy for safety
+            mergedHandCommunity = self._communityCards[:] # use a shallow copy for safety this was bug remember later julius
             for card in player._hand:
                 mergedHandCommunity.append(card)
             if self.hasStraight(mergedHandCommunity, checkStraightFlush=True): # TODO: ROYAL FLUSH BUT MAY JUST KEEP IT AS STRAIGHT FLUSH CUZ WHAT ARE THE ODDS LIKE 1 IN 1 MILLION LOL?
@@ -384,6 +384,10 @@ class Player:
         playerList.append(self)
 
 
+# for the coursework what did i do?
+# struggled with making copies of the deck and the community, it would alter the originals so i made copies
+# decided to make use of the gameController class methods
+# hand evaluator -> had many bugs (straight flush error!) is the worst part of this code is very messy
 class AIPlayer(Player):
     def __init__(self, name):
         super().__init__()
@@ -396,21 +400,18 @@ class AIPlayer(Player):
     
     def monteCarloSimulation(self, simulations, communityCards, deck):  
         deckCopy = Deck().createDeck()
-        # print(f"{len(deckCopy)}")
-        # print(f"deck {len(deck)}") 
-        
-        communityCardCopy = communityCards[:]
-        communityCardCopy.append("BOBBY")
-        print(f"copy {len(communityCardCopy)}")
-        print(f"real {len(communityCards)}") 
+        for handCard in self._hand: # remove hand card from deck copy
+            for deckCard in deckCopy:
+                if handCard._value == deckCard._value and handCard._suit == deckCard._suit:
+                    deckCopy.pop(deckCopy.index(deckCard))
 
-        """
+        communityCardsCopy = communityCards[:]
+        # when working on this in the future
+        # i will use a GameController class to replicate the game here?
         while len(communityCardsCopy) < 5:
-            deckCopy.shuffle()
-            fillerCard = deckCopy.dealCard()
-            communityCardsCopy.append(fillerCard) # complex algo
-        print(len(deckCopy._deck))
-        """
+            fillerCard = deckCopy[random.randint(0, len(deckCopy))]
+            communityCardsCopy.append(fillerCard) 
+
 
 class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
     def __init__(self, x, y, width, height, action, text, color):

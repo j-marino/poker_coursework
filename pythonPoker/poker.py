@@ -389,7 +389,7 @@ class Player:
 # decided to make use of the gameController class methods
 # hand evaluator -> had many bugs (straight flush error!) is the worst part of this code is very messy
 class AIPlayer(Player):
-    def __init__(self, name):
+    def __init__(self, name="monte"):
         super().__init__()
         self._name = name
         self._isHuman = False
@@ -398,8 +398,15 @@ class AIPlayer(Player):
     def doAction(self):
         return self._action()
     
-    def monteCarloSimulation(self, simulations, communityCards, deck):  
+    def monteCarloSimulation(self, simulations, communityCards, deck):
+        gameEnv = GameController()
+        opponent = AIPlayer()
+
         deckCopy = Deck().createDeck()
+        gameEnv._players = [self, opponent]
+        for _ in range(0, 2): 
+            opponent._hand.append(deckCopy[random.randint(0, len(deckCopy))])  
+        
         for handCard in self._hand: # remove hand card from deck copy
             for deckCard in deckCopy:
                 if handCard._value == deckCard._value and handCard._suit == deckCard._suit:
@@ -410,8 +417,13 @@ class AIPlayer(Player):
         # i will use a GameController class to replicate the game here?
         while len(communityCardsCopy) < 5:
             fillerCard = deckCopy[random.randint(0, len(deckCopy))]
-            communityCardsCopy.append(fillerCard) 
-
+            communityCardsCopy.append(fillerCard)
+        gameEnv._communityCards = communityCardsCopy
+        print(f"ai: {[card.getName() for card in self._hand]}")
+        print(f"filler: {[card.getName() for card in opponent._hand]}")
+        print(f"community {[card.getName() for card in communityCardsCopy]}")
+        gameEnv.evaluatePlayerHands()
+        exit()
 
 class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
     def __init__(self, x, y, width, height, action, text, color):

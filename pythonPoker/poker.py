@@ -278,7 +278,12 @@ class GameController:
             else:
                 player.evaluatedHand = "high card"
                 print("HCARD")
-            
+
+    def decideWinner(self): # added in prototype 2
+        # playerToScore = {} possible solution?
+        winner = None
+        for player in self._players:
+            pass
 
 class Dealer:
     def __init__(self):

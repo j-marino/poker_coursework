@@ -1,6 +1,7 @@
 import copy
 import pygame
 import random
+import time
 
 pygame.init()
 pygame.font.init()
@@ -156,7 +157,7 @@ class GameController:
         if currentPlayer._isHuman == True: # do not do an AI's turn if waiting for player to press button and do their turn
             return None # return None for now -> change to something better later?
         self._currentPlayerTurn += 1
-        currentPlayer.monteCarloSimulation(1000, self._communityCards, self._dealer._deck)
+        currentPlayer.monteCarloSimulation(10000, self._communityCards, self._dealer._deck)
         currentPlayer.doAction()
 
     def startNextRound(self):
@@ -254,30 +255,22 @@ class GameController:
                 mergedHandCommunity.append(card)
             if self.hasStraight(mergedHandCommunity, checkStraightFlush=True): # TODO: ROYAL FLUSH BUT MAY JUST KEEP IT AS STRAIGHT FLUSH CUZ WHAT ARE THE ODDS LIKE 1 IN 1 MILLION LOL?
                 player._evaluatedHand = "straight flush"
-                print("straight flush")
             elif self.hasXOfAKind(mergedHandCommunity, 4): # 4 of a kind
                 player._evaluatedHand = "four of a kind"
             elif self.hasXOfAKind(mergedHandCommunity, 3) and self.hasXOfAKind(mergedHandCommunity, 2):
                 player._evaluatedHand = "full house"
-                print("full house!")
             elif self.hasFlush(mergedHandCommunity):
                 player._evaluatedHand = "flush"
-                print("flush")
             elif self.hasStraight(mergedHandCommunity, checkStraightFlush=False):
                 player._evaluatedHand = "straight"
-                print("straight")
             elif self.hasXOfAKind(mergedHandCommunity, 3):
                 player._evaluatedHand = "three of a kind"
-                print("3OAK")
             elif self.twoPair(mergedHandCommunity):
                 player._evaluatedHand = "two pair"
-                print("2PAIR")
             elif self.hasXOfAKind(mergedHandCommunity, 2):
                 player._evaluatedHand = "one pair"
-                print("1PAIR")
             else:
-                player.evaluatedHand = "high card"
-                print("HCARD")
+                player._evaluatedHand = "high card"
 
     def decideWinner(self): # added in prototype 2
         # playerToScore = {} possible solution?
@@ -326,17 +319,19 @@ class Dealer:
                 player.giveCard(card)
 
 
-class Card():
-    def __init__(self, value, suit):
+class Card:
+    def __init__(self, value, suit, loadImage=True):
         self._value = value
         self._suit = suit
         self._path = f"cards/{self.getName()}.png"
         self._width = cardWidth
         self._height = cardHeight
-        self._image = pygame.transform.scale(pygame.image.load(self._path), (self._width , self._height))
-        self._x = None
-        self._y = None
-
+        self._x = self._y = None
+        if loadImage:
+            path = f"cards/{self.getName()}.png"
+            self._image = pygame.transform.scale(pygame.image.load(path), (cardWidth, cardHeight))
+        else:
+            self._image = None
     # returns the name of the card in the convention of the card images
     def getName(self):
         return f"{self._value}_of_{self._suit}"
@@ -409,27 +404,56 @@ class AIPlayer(Player):
         wins = 0
         gameEnv = GameController()
         opponent = AIPlayer()
+        gameEnv._players = [self, opponent]
+        startTime = time.time()
+        deckCopy = [Card(value, suit, loadImage=False) for value in Deck()._values for suit in Deck()._suits]
+        knownNamedCards = [card.getName() for mergedCards in (self._hand, communityCards) for card in mergedCards]
+        cardsNeeded = (5 - len(communityCards)) + 2
+        knownDeck = [card for card in deckCopy if card.getName() not in knownNamedCards]
 
         for simulation in range(0, simulations):
-            deckCopy = Deck().createDeck()
-            print(len(deckCopy))
-            gameEnv._players = [self, opponent]
-            for _ in range(0, 2): 
-                opponent._hand.append(deckCopy[random.randint(0, len(deckCopy))])  
+            # knownDeck = [card for card in deckCopy if card.getName() not in knownNamedCards]
+            sampledCards = random.sample(knownDeck, cardsNeeded)
+            opponent._hand = sampledCards[:2]
+
+            # pre image = very slow put in dev journey for coursework
+            # print(simulation)
             
+            # opponent._hand = random.sample(knownDeck, 2) 
+            # namedOpponentCards = [card.getName() for card in opponent._hand]
+            # knownDeck = [card for card in knownDeck if card.getName() not in namedOpponentCards]
+
+            # knownDeck = [card for card in knownDeck if]
+        
+            # for _ in range(0, 2): 
+            #     opponent._hand.append(deckCopy[random.randint(0, len(deckCopy) - 1)])  
+            """
             for handCard in self._hand: # remove hand card from deck copy
                 for deckCard in deckCopy:
                     if handCard._value == deckCard._value and handCard._suit == deckCard._suit:
                         deckCopy.pop(deckCopy.index(deckCard))
+            """
 
-            communityCardsCopy = communityCards[:]
+            # deckCopy = list(set(deckCopy) - set(self._hand))
+            # print(len(deckCopy)) doesnt work lol
+
+            
             # when working on this in the future
             # i will use a GameController class to replicate the game here?
+            """
             while len(communityCardsCopy) < 5:
                 randomIndex = random.randint(0, len(deckCopy) - 1)
                 #print(randomIndex)
                 fillerCard = deckCopy[randomIndex]
                 communityCardsCopy.append(fillerCard)
+            """
+            generatedCommunityCards = sampledCards[2:] 
+            # namedCommunityCards = [card.getName() for card in generatedCommunityCards]
+            # knownDeck = [card for card in knownDeck if card.getName() not in namedCommunityCards]
+
+            # for card in generatedCommunityCards:
+                # communityCardsCopy.append(card)
+            communityCardsCopy = communityCards[:] + generatedCommunityCards
             gameEnv._communityCards = communityCardsCopy
             # print(f"ai: {[card.getName() for card in self._hand]}")
             # print(f"filler: {[card.getName() for card in opponent._hand]}")
@@ -437,7 +461,9 @@ class AIPlayer(Player):
             gameEnv.evaluatePlayerHands()
             if gameEnv.decideWinner() == self:
                 wins += 1
-        print({f"after {simulations} simulations this AI won {wins} times"})
+
+        print(f"after {simulations} simulations this AI won {wins} times")
+        print(time.time() - startTime)
         exit()
         
 

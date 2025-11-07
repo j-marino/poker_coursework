@@ -281,9 +281,11 @@ class GameController:
 
     def decideWinner(self): # added in prototype 2
         # playerToScore = {} possible solution?
-        winner = None
+        winner = self._players[0] # default value
         for player in self._players:
-            pass
+            if self._handValue[player._evaluatedHand] > self._handValue[winner._evaluatedHand]:
+                winner = player # TODO: tied cases????
+        return winner
 
 class Dealer:
     def __init__(self):
@@ -404,31 +406,40 @@ class AIPlayer(Player):
         return self._action()
     
     def monteCarloSimulation(self, simulations, communityCards, deck):
+        wins = 0
         gameEnv = GameController()
         opponent = AIPlayer()
 
-        deckCopy = Deck().createDeck()
-        gameEnv._players = [self, opponent]
-        for _ in range(0, 2): 
-            opponent._hand.append(deckCopy[random.randint(0, len(deckCopy))])  
-        
-        for handCard in self._hand: # remove hand card from deck copy
-            for deckCard in deckCopy:
-                if handCard._value == deckCard._value and handCard._suit == deckCard._suit:
-                    deckCopy.pop(deckCopy.index(deckCard))
+        for simulation in range(0, simulations):
+            deckCopy = Deck().createDeck()
+            print(len(deckCopy))
+            gameEnv._players = [self, opponent]
+            for _ in range(0, 2): 
+                opponent._hand.append(deckCopy[random.randint(0, len(deckCopy))])  
+            
+            for handCard in self._hand: # remove hand card from deck copy
+                for deckCard in deckCopy:
+                    if handCard._value == deckCard._value and handCard._suit == deckCard._suit:
+                        deckCopy.pop(deckCopy.index(deckCard))
 
-        communityCardsCopy = communityCards[:]
-        # when working on this in the future
-        # i will use a GameController class to replicate the game here?
-        while len(communityCardsCopy) < 5:
-            fillerCard = deckCopy[random.randint(0, len(deckCopy))]
-            communityCardsCopy.append(fillerCard)
-        gameEnv._communityCards = communityCardsCopy
-        print(f"ai: {[card.getName() for card in self._hand]}")
-        print(f"filler: {[card.getName() for card in opponent._hand]}")
-        print(f"community {[card.getName() for card in communityCardsCopy]}")
-        gameEnv.evaluatePlayerHands()
+            communityCardsCopy = communityCards[:]
+            # when working on this in the future
+            # i will use a GameController class to replicate the game here?
+            while len(communityCardsCopy) < 5:
+                randomIndex = random.randint(0, len(deckCopy) - 1)
+                #print(randomIndex)
+                fillerCard = deckCopy[randomIndex]
+                communityCardsCopy.append(fillerCard)
+            gameEnv._communityCards = communityCardsCopy
+            # print(f"ai: {[card.getName() for card in self._hand]}")
+            # print(f"filler: {[card.getName() for card in opponent._hand]}")
+            # print(f"community {[card.getName() for card in communityCardsCopy]}")
+            gameEnv.evaluatePlayerHands()
+            if gameEnv.decideWinner() == self:
+                wins += 1
+        print({f"after {simulations} simulations this AI won {wins} times"})
         exit()
+        
 
 class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
     def __init__(self, x, y, width, height, action, text, color):

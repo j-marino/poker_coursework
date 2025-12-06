@@ -63,12 +63,13 @@ class GameController:
             3: self.river
         } # ^ doesnt start with preFlop since it happens at the beginning of the game and it's much easier to start the index at 0 and begin the 
         # function calls after the preFlop is done
-        self._handValue = {"royal flush": 10,
+        # stores a dictionary of the hands mapped to their value in descending order
+        self._handValue = {"royal flush": 10, 
                         "straight flush": 9,
                         "four of a kind": 8,
                         "full house": 7,
                         "flush": 6,
-                        "straight": 5,
+                        "straight": 5,  
                         "three of a kind": 4,
                         "two pair": 3,
                         "one pair": 2,
@@ -175,11 +176,15 @@ class GameController:
             if card._x != None and card._y != None:
                 card.draw()
     
-    def hasFlush(self, mergedCards): # check flush
+    # takes the 2 player cards and community cards as one list
+    def hasFlush(self, mergedCards): 
+        # dictionary to keep track of the highest suit.
         suitCount = {"clubs": 0, "hearts": 0, "spades": 0, "diamonds": 0}
         for card in mergedCards:
+            # add one to the value from the k-v pair
             suitCount[card._suit] += 1
         for value in suitCount.values():
+            # a flush occurs when there are 5 or more of the same suit in your merged cards.
             if value >= 5:
                 return True # flush
         return False

@@ -189,91 +189,142 @@ class GameController:
                 return True # flush
         return False
 
+    # this method is used for the logic of the straight
+    # dealing with the possiblites of having Ace of x as its 2 possible values (1 or highest card)
+    # and checking for a straight flush by using the hasFlush() method
     def hasConsecutiveSequence(self, orderedCardList, isLowAce, checkStraightFlush):
-        count = 1 
-        for cardIndex in range(len(orderedCardList) - 1): # so no last one since we checking the next index
+        # the count starts at 1 instead of 0 because the first card in the ordered check would not
+        # be counted due to checking if the next card is +1 of the current card.
+        count = 1
+        # loop through all cards except the last since we compare to the next card
+        for cardIndex in range(len(orderedCardList) - 1):
             currentCardIntValue = orderedCardList[cardIndex].getIntValue()
             nextCardIntValue = orderedCardList[cardIndex + 1].getIntValue()
+
+            # str value allows me to check for aces or not.
             currentCardStrValue = orderedCardList[cardIndex]._value
             nextCardStrValue = orderedCardList[cardIndex + 1]._value
+
+            # adjust ace value if low ace mode is on
             if currentCardStrValue == "ace" and isLowAce == True:
-                currentCardIntValue = 1
+                currentCardIntValue = 1 # ace can be either 1 or max (14)
             if nextCardStrValue == "ace" and isLowAce == True:
                 nextCardIntValue = 1
+
+            # check if the next card continues the sequence
             if currentCardIntValue + 1 == nextCardIntValue:
                 count += 1
+                # once we hit 5 in a row we have a straight
                 if count == 5:
+                    # if we're not checking for straight flush we're done
                     if checkStraightFlush == False:
                         return True
+                    # otherwise check if these 5 cards share the same suit
                     if checkStraightFlush == True:
-                        if self.hasFlush(orderedCardList[cardIndex - 3: cardIndex + 2]):
+                        # card index - 3 refers to the start of the straight
+                        # card index + 2 refers to the end of the straight
+                        #  we must also check if the straight has a flush too
+                        if self.hasFlush(orderedCardList[cardIndex - 3 : cardIndex + 2]):
                             return True
                         else:
                             return False
+                        
+            # duplicated values don't break the sequence, just skip them
             elif currentCardIntValue == nextCardIntValue:
                 continue
-            else: 
-                count = 1
+            else:
+                count = 1 # if the sequence is broken reset back to 1 NOT 0!!!
+                # this is due to counting logic. (more in depth at start of method)
+
+        # no straight so return False.
         return False
 
-    # TODO: rename some of these functions
     def hasStraight(self, mergedCards, checkStraightFlush): # check straight
+        # only interested in the card's value not the object so list of card values is made
         communityValue = [card._value for card in mergedCards]
         ascendingCards = sorted(mergedCards, key=lambda card: card.getIntValue())
+
+        # counts the number of aces
         if "ace" in communityValue:
             aceCount = 0
             for card in ascendingCards:
                 if card._value == "ace":
                     aceCount += 1
-            lowAce = ascendingCards[len(ascendingCards) - aceCount:]
-            for card in ascendingCards[:len(ascendingCards) - aceCount]:
+            # to account for aces dual value i make a new list that moves the aces to the front
+            # via making a list of all the aces 
+            acesEndIndex = len(ascendingCards) - aceCount
+            lowAce = ascendingCards[acesEndIndex:]
+            
+            # then looping until where the aces end.
+            for card in ascendingCards[:acesEndIndex]:
                 lowAce.append(card) # ace = 1 
+            # this returns True if the aces as 1 or aces as 14 form a straight
             return self.hasConsecutiveSequence(ascendingCards, False, checkStraightFlush) or self.hasConsecutiveSequence(lowAce, True, checkStraightFlush)
+        
+        # return for no aces in the mergedCards.
         return self.hasConsecutiveSequence(ascendingCards, False, checkStraightFlush)
     
     def sumValueCount(self, mergedCards):
+        # makes a dictionary where each card value maps to how many times it appears
+        # e.g. {"king": 2, "7": 1, "ace": 1}
         valueCount = {}
         for card in mergedCards:
             if card._value not in valueCount:
-                valueCount[card._value] = 1
+                valueCount[card._value] = 1  # first time seeing this value
             else:
-                valueCount[card._value] += 1
+                valueCount[card._value] += 1  # increment count for duplicates
         return valueCount
-    
+
+
     def hasXOfAKind(self, mergedCards, matchingValue):
+        # checks if any card value appears exactly matchingValue amount of times
         for num in self.sumValueCount(mergedCards).values():
             if num == matchingValue:
-                return True
-        return False
-    
+                return True  # found an X of a kind
+        return False  # no X of a kind
+
+
     def twoPair(self, mergedCards):
+        # checks for 2, 2 of a kinds
+        # e.g. king of spades, king of hearts + queen of clubs, queen of diamonds
         twoPairCount = 0
         for num in self.sumValueCount(mergedCards).values():
             if num == 2:
-                twoPairCount += 1
-        return twoPairCount == 2
+                twoPairCount += 1  # found another pair
+        return twoPairCount == 2  # this is always == 2 and never more since its impossible to have 3 occurnces for 2 of a kinds
 
-    def evaluatePlayerHands(self): # must check if works with multiple players -> for prototype 2
-        for player in self._players:
+    # i check in reverse order of hand value for simplicity and time complexity
+    # as once the value has been found we can guarantee that is the best hand for that player's hand
+    # this needs to be performant since it will be used for the monte-carlo simulations
+    def evaluatePlayerHands(self):
+        for player in self._players: # check each player
             mergedHandCommunity = self._communityCards[:] # use a shallow copy for safety this was bug remember later julius
             for card in player._hand:
-                mergedHandCommunity.append(card)
-            if self.hasStraight(mergedHandCommunity, checkStraightFlush=True): # TODO: ROYAL FLUSH BUT MAY JUST KEEP IT AS STRAIGHT FLUSH CUZ WHAT ARE THE ODDS LIKE 1 IN 1 MILLION LOL?
+                mergedHandCommunity.append(card) # add the current player's cards to the merged list (reset on next player)
+            if self.hasStraight(mergedHandCommunity, checkStraightFlush=True):
                 player._evaluatedHand = "straight flush"
+                
             elif self.hasXOfAKind(mergedHandCommunity, 4): # 4 of a kind
                 player._evaluatedHand = "four of a kind"
+            
             elif self.hasXOfAKind(mergedHandCommunity, 3) and self.hasXOfAKind(mergedHandCommunity, 2):
                 player._evaluatedHand = "full house"
+            
             elif self.hasFlush(mergedHandCommunity):
                 player._evaluatedHand = "flush"
+            
             elif self.hasStraight(mergedHandCommunity, checkStraightFlush=False):
                 player._evaluatedHand = "straight"
+
             elif self.hasXOfAKind(mergedHandCommunity, 3):
                 player._evaluatedHand = "three of a kind"
+            
             elif self.twoPair(mergedHandCommunity):
                 player._evaluatedHand = "two pair"
+            
             elif self.hasXOfAKind(mergedHandCommunity, 2):
                 player._evaluatedHand = "one pair"
+            
             else:
                 player._evaluatedHand = "high card"
 
@@ -396,6 +447,7 @@ class Player:
     def call(self):
         print("calling")
 
+
 class AIPlayer(Player):
     def __init__(self, name="monte"):
         super().__init__()
@@ -408,6 +460,8 @@ class AIPlayer(Player):
         self._tiltLevel = 0 # decide later ^^^
     
     def doAction(self):
+        if self._action == self.raisePot:
+            return self._action(100)
         return self._action()
     
     def monteCarloSimulation(self, simulations, communityCards):
@@ -443,7 +497,7 @@ class AIPlayer(Player):
 
         print(f"after {simulations} simulations this AI won {wins} times")
         # print(time.time() - startTime)
-        print(self.attributeMath(wins, simulations))
+        self.attributeMath(wins, simulations)
     
     def attributeMath(self, wins, simulations):
         winrate = wins / simulations
@@ -452,18 +506,17 @@ class AIPlayer(Player):
                 # add an all in chance and how get the call value!
                 self._action = self.raisePot(100) # temp value to raise by
             else:
-                self._action = self.call()
+                self._action = self.call
         elif self._aggressiveness > self._bluffConstant:
             if self._aggressiveness > self._confidence:
                 self._action = self.raisePot(100) # temp val
-            elif True:
-                pass
+        else:
+            self._action = self.fold
 
         # print(f"conf {self._confidence}")
         # print(f"bluff {self._bluffConstant}")
         # print(f"aggro {self._aggressiveness}")
         # print(f"tilt{self._tiltLevel}")
-
 
 class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
     def __init__(self, x, y, width, height, action, text, color):

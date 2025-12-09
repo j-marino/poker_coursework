@@ -134,14 +134,15 @@ class GameController:
         self._dealer.dealRiver(self._communityCards)
         cardIndex = len(self._communityCards) - 1
         self._communityCards[-1].setPos(communityCardX[cardIndex], communityCardY)
+        # handEvaluator() method called here -> will be done in prototype 2 
 
+        # for debugging
         """
-        # debugging -> set the cards to what i want
         self._communityCards = [Card("5", "hearts"), Card("6", "hearts"), Card("7", "hearts"), Card("king", "spades"), Card("2", "spades")]
         for index, card in enumerate(self._communityCards):
             card.setPos(communityCardX[index], communityCardY)
 
-        self._players[0]._hand = [Card("9", "hearts"), Card("8", "diamonds")]
+        self._players[0]._hand = [Card("9", "hearts"), Card("3", "diamonds")]
         for index, card in enumerate(self._players[0]._hand):
                     card.setPos(handCardX[index], handCardY)
         """
@@ -157,7 +158,7 @@ class GameController:
         if currentPlayer._isHuman == True: # do not do an AI's turn if waiting for player to press button and do their turn
             return None # return None for now -> change to something better later?
         self._currentPlayerTurn += 1
-        currentPlayer.monteCarloSimulation(10000, self._communityCards, self._dealer._deck)
+        currentPlayer.monteCarloSimulation(10000, self._communityCards)
         currentPlayer.doAction()
 
     def startNextRound(self):
@@ -188,146 +189,96 @@ class GameController:
                 return True # flush
         return False
 
-    # this method is used for the logic of the straight
-    # dealing with the possiblites of having Ace of x as its 2 possible values (1 or highest card)
-    # and checking for a straight flush by using the hasFlush() method
     def hasConsecutiveSequence(self, orderedCardList, isLowAce, checkStraightFlush):
-        # the count starts at 1 instead of 0 because the first card in the ordered check would not
-        # be counted due to checking if the next card is +1 of the current card.
-        count = 1
-        # loop through all cards except the last since we compare to the next card
-        for cardIndex in range(len(orderedCardList) - 1):
+        count = 1 
+        for cardIndex in range(len(orderedCardList) - 1): # so no last one since we checking the next index
             currentCardIntValue = orderedCardList[cardIndex].getIntValue()
             nextCardIntValue = orderedCardList[cardIndex + 1].getIntValue()
-
-            # str value allows me to check for aces or not.
             currentCardStrValue = orderedCardList[cardIndex]._value
             nextCardStrValue = orderedCardList[cardIndex + 1]._value
-
-            # adjust ace value if low ace mode is on
             if currentCardStrValue == "ace" and isLowAce == True:
-                currentCardIntValue = 1 # ace can be either 1 or max (14)
+                currentCardIntValue = 1
             if nextCardStrValue == "ace" and isLowAce == True:
                 nextCardIntValue = 1
-
-            # check if the next card continues the sequence
             if currentCardIntValue + 1 == nextCardIntValue:
                 count += 1
-                # once we hit 5 in a row we have a straight
                 if count == 5:
-                    # if we're not checking for straight flush we're done
                     if checkStraightFlush == False:
                         return True
-                    # otherwise check if these 5 cards share the same suit
                     if checkStraightFlush == True:
-                        # card index - 3 refers to the start of the straight
-                        # card index + 2 refers to the end of the straight
-                        #  we must also check if the straight has a flush too
-                        if self.hasFlush(orderedCardList[cardIndex - 3 : cardIndex + 2]):
+                        if self.hasFlush(orderedCardList[cardIndex - 3: cardIndex + 2]):
                             return True
                         else:
                             return False
-                        
-            # duplicated values don't break the sequence, just skip them
             elif currentCardIntValue == nextCardIntValue:
                 continue
-            else:
-                count = 1 # if the sequence is broken reset back to 1 NOT 0!!!
-                # this is due to counting logic. (more in depth at start of method)
-
-        # no straight so return False.
+            else: 
+                count = 1
         return False
 
+    # TODO: rename some of these functions
     def hasStraight(self, mergedCards, checkStraightFlush): # check straight
-        # only interested in the card's value not the object so list of card values is made
         communityValue = [card._value for card in mergedCards]
         ascendingCards = sorted(mergedCards, key=lambda card: card.getIntValue())
-
-        # counts the number of aces
         if "ace" in communityValue:
             aceCount = 0
             for card in ascendingCards:
                 if card._value == "ace":
                     aceCount += 1
-            # to account for aces dual value i make a new list that moves the aces to the front
-            # via making a list of all the aces 
-            acesEndIndex = len(ascendingCards) - aceCount
-            lowAce = ascendingCards[acesEndIndex:]
-            
-            # then looping until where the aces end.
-            for card in ascendingCards[:acesEndIndex]:
+            lowAce = ascendingCards[len(ascendingCards) - aceCount:]
+            for card in ascendingCards[:len(ascendingCards) - aceCount]:
                 lowAce.append(card) # ace = 1 
-            # this returns True if the aces as 1 or aces as 14 form a straight
             return self.hasConsecutiveSequence(ascendingCards, False, checkStraightFlush) or self.hasConsecutiveSequence(lowAce, True, checkStraightFlush)
-        
-        # return for no aces in the mergedCards.
         return self.hasConsecutiveSequence(ascendingCards, False, checkStraightFlush)
     
     def sumValueCount(self, mergedCards):
-        # makes a dictionary where each card value maps to how many times it appears
-        # e.g. {"king": 2, "7": 1, "ace": 1}
         valueCount = {}
         for card in mergedCards:
             if card._value not in valueCount:
-                valueCount[card._value] = 1  # first time seeing this value
+                valueCount[card._value] = 1
             else:
-                valueCount[card._value] += 1  # increment count for duplicates
+                valueCount[card._value] += 1
         return valueCount
-
-
+    
     def hasXOfAKind(self, mergedCards, matchingValue):
-        # checks if any card value appears exactly matchingValue amount of times
         for num in self.sumValueCount(mergedCards).values():
             if num == matchingValue:
-                return True  # found an X of a kind
-        return False  # no X of a kind
-
-
+                return True
+        return False
+    
     def twoPair(self, mergedCards):
-        # checks for 2, 2 of a kinds
-        # e.g. king of spades, king of hearts + queen of clubs, queen of diamonds
         twoPairCount = 0
         for num in self.sumValueCount(mergedCards).values():
             if num == 2:
-                twoPairCount += 1  # found another pair
-        return twoPairCount == 2  # this is always == 2 and never more since its impossible to have 3 occurnces for 2 of a kinds
+                twoPairCount += 1
+        return twoPairCount == 2
 
-    # i check in reverse order of hand value for simplicity and time complexity
-    # as once the value has been found we can guarantee that is the best hand for that player's hand
-    # this needs to be performant since it will be used for the monte-carlo simulations
-    def evaluatePlayerHands(self):
-        for player in self._players: # check each player
+    def evaluatePlayerHands(self): # must check if works with multiple players -> for prototype 2
+        for player in self._players:
             mergedHandCommunity = self._communityCards[:] # use a shallow copy for safety this was bug remember later julius
             for card in player._hand:
-                mergedHandCommunity.append(card) # add the current player's cards to the merged list (reset on next player)
-            if self.hasStraight(mergedHandCommunity, checkStraightFlush=True):
+                mergedHandCommunity.append(card)
+            if self.hasStraight(mergedHandCommunity, checkStraightFlush=True): # TODO: ROYAL FLUSH BUT MAY JUST KEEP IT AS STRAIGHT FLUSH CUZ WHAT ARE THE ODDS LIKE 1 IN 1 MILLION LOL?
                 player._evaluatedHand = "straight flush"
-                
             elif self.hasXOfAKind(mergedHandCommunity, 4): # 4 of a kind
                 player._evaluatedHand = "four of a kind"
-            
             elif self.hasXOfAKind(mergedHandCommunity, 3) and self.hasXOfAKind(mergedHandCommunity, 2):
                 player._evaluatedHand = "full house"
-            
             elif self.hasFlush(mergedHandCommunity):
                 player._evaluatedHand = "flush"
-            
             elif self.hasStraight(mergedHandCommunity, checkStraightFlush=False):
                 player._evaluatedHand = "straight"
-
             elif self.hasXOfAKind(mergedHandCommunity, 3):
                 player._evaluatedHand = "three of a kind"
-            
             elif self.twoPair(mergedHandCommunity):
                 player._evaluatedHand = "two pair"
-            
             elif self.hasXOfAKind(mergedHandCommunity, 2):
                 player._evaluatedHand = "one pair"
-            
             else:
                 player._evaluatedHand = "high card"
 
     def decideWinner(self): # added in prototype 2
+        # playerToScore = {} possible solution?
         winner = self._players[0] # default value
         for player in self._players:
             if self._handValue[player._evaluatedHand] > self._handValue[winner._evaluatedHand]:
@@ -427,7 +378,7 @@ class Player:
         self._isHuman = True
 
     def fold(self):
-        # print("I FOLDED")
+        print("I FOLDED")
         self._isFolded = True
 
     def check(self): # skips player turn, if previous turn was check or nothing
@@ -438,7 +389,12 @@ class Player:
     
     def addToGame(self, playerList):
         playerList.append(self)
+    
+    def raisePot(self, amount):
+        print(f"raising by {amount}")
 
+    def call(self):
+        print("calling")
 
 class AIPlayer(Player):
     def __init__(self, name="monte"):
@@ -446,76 +402,68 @@ class AIPlayer(Player):
         self._name = name
         self._isHuman = False
         self._action = self.check # temp action value
+        self._bluffConstant = 1 / random.randint(1, 100) # random float value betwwen 0.01 and 1
+        self._aggressiveness =  1 / random.randint(1, 100) 
+        self._confidence = 1 / random.randint(20, 55) # idk rn? 0.x as a average value??
+        self._tiltLevel = 0 # decide later ^^^
     
     def doAction(self):
         return self._action()
     
-    def monteCarloSimulation(self, simulations, communityCards, deck):
-        wins = 0
-        gameEnv = GameController()
-        opponent = AIPlayer()
+    def monteCarloSimulation(self, simulations, communityCards):
+        wins = 0 # counter for the wins
+        gameEnv = GameController() # recreate the game env outside the game loop
+        opponent = AIPlayer() # opponent to play against in the simulations
         gameEnv._players = [self, opponent]
-        startTime = time.time()
+        startTime = time.time() # temporarily here for time benchmarking
+
+        # create copy of the deck and remove what we know from copies
         deckCopy = [Card(value, suit, loadImage=False) for value in Deck()._values for suit in Deck()._suits]
         knownNamedCards = [card.getName() for mergedCards in (self._hand, communityCards) for card in mergedCards]
-        cardsNeeded = (5 - len(communityCards)) + 2
+        cardsNeeded = (5 - len(communityCards)) + 2 # the +2 is for the opponnent cards needed
+        # the simulations only work for 1 simulated oppponent, may change based on results?
         knownDeck = [card for card in deckCopy if card.getName() not in knownNamedCards]
 
+
         for simulation in range(0, simulations):
-            # knownDeck = [card for card in deckCopy if card.getName() not in knownNamedCards]
+            # get a list of randomly picked cards for the community cards and the opponent hand cards.
             sampledCards = random.sample(knownDeck, cardsNeeded)
-            opponent._hand = sampledCards[:2]
+            opponent._hand = sampledCards[:2] # slice the last 2 cards for the opponent cards.
 
-            # pre image = very slow put in dev journey for coursework
-            # print(simulation)
-            
-            # opponent._hand = random.sample(knownDeck, 2) 
-            # namedOpponentCards = [card.getName() for card in opponent._hand]
-            # knownDeck = [card for card in knownDeck if card.getName() not in namedOpponentCards]
-
-            # knownDeck = [card for card in knownDeck if]
-        
-            # for _ in range(0, 2): 
-            #     opponent._hand.append(deckCopy[random.randint(0, len(deckCopy) - 1)])  
-            """
-            for handCard in self._hand: # remove hand card from deck copy
-                for deckCard in deckCopy:
-                    if handCard._value == deckCard._value and handCard._suit == deckCard._suit:
-                        deckCopy.pop(deckCopy.index(deckCard))
-            """
-
-            # deckCopy = list(set(deckCopy) - set(self._hand))
-            # print(len(deckCopy)) doesnt work lol
-
-            
-            # when working on this in the future
-            # i will use a GameController class to replicate the game here?
-            """
-            while len(communityCardsCopy) < 5:
-                randomIndex = random.randint(0, len(deckCopy) - 1)
-                #print(randomIndex)
-                fillerCard = deckCopy[randomIndex]
-                communityCardsCopy.append(fillerCard)
-            """
+            # slice up to the last 2 for the community cards
             generatedCommunityCards = sampledCards[2:] 
-            # namedCommunityCards = [card.getName() for card in generatedCommunityCards]
-            # knownDeck = [card for card in knownDeck if card.getName() not in namedCommunityCards]
 
-            # for card in generatedCommunityCards:
-                # communityCardsCopy.append(card)
+            # have to use a copy of the communityCards for safety so we dont affect the actual game
             communityCardsCopy = communityCards[:] + generatedCommunityCards
             gameEnv._communityCards = communityCardsCopy
-            # print(f"ai: {[card.getName() for card in self._hand]}")
-            # print(f"filler: {[card.getName() for card in opponent._hand]}")
-            # print(f"community {[card.getName() for card in communityCardsCopy]}")
-            gameEnv.evaluatePlayerHands()
+
+            gameEnv.evaluatePlayerHands() # each player's attribute of evaluatedHand gets changed accordingly
             if gameEnv.decideWinner() == self:
                 wins += 1
 
         print(f"after {simulations} simulations this AI won {wins} times")
-        print(time.time() - startTime)
-        exit()
-        
+        # print(time.time() - startTime)
+        print(self.attributeMath(wins, simulations))
+    
+    def attributeMath(self, wins, simulations):
+        winrate = wins / simulations
+        if winrate > self._confidence:
+            if self._aggressiveness > self._confidence:
+                # add an all in chance and how get the call value!
+                self._action = self.raisePot(100) # temp value to raise by
+            else:
+                self._action = self.call()
+        elif self._aggressiveness > self._bluffConstant:
+            if self._aggressiveness > self._confidence:
+                self._action = self.raisePot(100) # temp val
+            elif True:
+                pass
+
+        # print(f"conf {self._confidence}")
+        # print(f"bluff {self._bluffConstant}")
+        # print(f"aggro {self._aggressiveness}")
+        # print(f"tilt{self._tiltLevel}")
+
 
 class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
     def __init__(self, x, y, width, height, action, text, color):

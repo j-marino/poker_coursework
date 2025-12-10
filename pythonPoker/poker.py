@@ -74,6 +74,7 @@ class GameController:
                         "two pair": 3,
                         "one pair": 2,
                         "high card": 1}
+        self._turn_history = []
 
     def gameLoop(self):
         AIPlayer1 = AIPlayer("monte")
@@ -88,6 +89,8 @@ class GameController:
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1: # if left click
                         if self._buttons.checkButtonClicked() == True: # loops over all buttons to see if one was clicked
+                            self.addToTurnHistory(self._buttons.getActionName())
+                            print(self.getTurnHistory())
                             self._currentPlayerTurn += 1
 
             if self.checkRoundEnd() == True: 
@@ -101,6 +104,12 @@ class GameController:
             self.drawCards()
             pygame.display.update()
             clock.tick(60) # 60 fps
+
+    def addToTurnHistory(self, name):
+        self._turn_history.append(name)
+    
+    def getTurnHistory(self):
+        return self._turn_history
 
     def preFlop(self):
             # deals each player their hand -> then gives the cards their coordinates on the screen
@@ -151,6 +160,12 @@ class GameController:
     def checkRoundEnd(self):
         # the round is considered ended when each player has made their turn
         # this condition will change when betting, i.e. essential feature balance system is added.
+
+        for action in self._turn_history:
+            if action == "raise":
+                print("raise reset round!")
+                self._currentPlayerTurn = 0 # reset player turn
+                # ^raisePOt must have quanitity restrictions bababababaab
         return self._currentPlayerTurn > len(self._players) - 1
     
     def computerAction(self):
@@ -159,6 +174,7 @@ class GameController:
             return None # return None for now -> change to something better later?
         self._currentPlayerTurn += 1
         currentPlayer.monteCarloSimulation(10000, self._communityCards)
+        self.addToTurnHistory(currentPlayer.getActionName()) # bobbobobobbobobobobob
         currentPlayer.doAction()
 
     def startNextRound(self):
@@ -429,11 +445,12 @@ class Player:
         self._isHuman = True
 
     def fold(self):
-        print("I FOLDED")
+        # print("I FOLDED")
         self._isFolded = True
 
     def check(self): # skips player turn, if previous turn was check or nothing
-        print("I CHECKED") # debugging
+        # print("I CHECKED") # debugging
+        pass
 
     def giveCard(self, card):
         self._hand.append(card) # append Card object to hand attribute
@@ -454,6 +471,7 @@ class AIPlayer(Player):
         self._name = name
         self._isHuman = False
         self._action = self.check # temp action value
+        self._actionName = "check"
         self._bluffConstant = 1 / random.randint(1, 100) # random float value betwwen 0.01 and 1
         self._aggressiveness =  1 / random.randint(1, 100) 
         self._confidence = 1 / random.randint(20, 55) # idk rn? 0.x as a average value??
@@ -463,6 +481,9 @@ class AIPlayer(Player):
         if self._action == self.raisePot:
             return self._action(100)
         return self._action()
+    
+    def getActionName(self):
+        return self._actionName
     
     def monteCarloSimulation(self, simulations, communityCards):
         wins = 0 # counter for the wins
@@ -504,14 +525,17 @@ class AIPlayer(Player):
         if winrate > self._confidence:
             if self._aggressiveness > self._confidence:
                 # add an all in chance and how get the call value!
-                self._action = self.raisePot(100) # temp value to raise by
+                self._action = self.raisePot # temp value to raise by
+                self._actionName = "raise"
             else:
                 self._action = self.call
+                self._actionName = "call"
         elif self._aggressiveness > self._bluffConstant:
             if self._aggressiveness > self._confidence:
-                self._action = self.raisePot(100) # temp val
+                self._action = self.raisePot # temp val
         else:
             self._action = self.fold
+            self._actionName = "fold"
 
         # print(f"conf {self._confidence}")
         # print(f"bluff {self._bluffConstant}")
@@ -541,6 +565,10 @@ class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
             return True # signifies yes this button has been pressed
         else:
             return False # returns False if the button was not pressed
+        
+    def getActionName(self):
+        if self.checkButtonClicked():
+            return self.button._action
 
 
 class ButtonManager:
@@ -554,6 +582,13 @@ class ButtonManager:
                 clicked = True
         return clicked # this function is needed to check that a button has been pressed 
     # so i can change the game state accorindgly
+
+    # RENAME THIS FUNCTION LATER
+    def getActionName(self):
+        if self.checkButtonClicked():
+            for buttonName in self._buttons: # loops over dict() keys
+                if self._buttons[buttonName].wasClicked() == True:
+                    return buttonName
 
     def drawAllButtons(self):
         for buttonName in self._buttons:

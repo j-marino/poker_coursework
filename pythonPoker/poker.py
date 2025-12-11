@@ -14,7 +14,10 @@ actionButtonWidth, actionButtonHeight = 120, 40
 # calculate the button x coordinate so that they are mathematically equally spaced across the screen
 # since its going to be 3 buttons displayed at a time the x coordinates are decided by multipying the screen width by 0.25 * n
 # half button width is subtracted since it is draw from the top left corner.
-actionButtonX = {"check": (int(screenWidth * 0.25)) - actionButtonWidth / 2, "fold": (int(screenWidth * 0.50)) - actionButtonWidth / 2}
+actionButtonX = {"check": (int(screenWidth * 0.20)) - actionButtonWidth / 2, 
+                 "fold": (int(screenWidth * 0.40)) - actionButtonWidth / 2,
+                 "raise": (int(screenWidth * 0.60)) - actionButtonWidth / 2,
+                 "call": (int(screenWidth * 0.80)) - actionButtonWidth / 2}
 actionbuttonY = screenHeight - 70 # each action button will share the same height
 # ^ both X and Y coords are calculated from screenHeight so that it scales accordingly
 cardWidth = 125
@@ -36,6 +39,11 @@ communityCardX = [
 ] # list comprehension - > evenly spaced x-coords for community cards
 communityCardY = screenHeight - communityCardYGap
 
+# pygame.transform.scale(pygame.image.load(path), (cardWidth, cardHeight))
+cardBack = pygame.transform.scale(pygame.image.load("cardBacks/card_back_red.png"), (cardWidth, cardHeight)) # must be loaded outside the card class for performance.
+AIPosX = [handCardX[0]] # temp to see if image loads
+AIPosY = [handCardY - 600]
+
 screen = pygame.display.set_mode((screenWidth, screenHeight))
 
 class GameController:
@@ -52,6 +60,8 @@ class GameController:
             # the action of the button e,g, humanPlayer.check comes from the previously created humanPlayer which is why humanPlayer is created before this
             "check": Button(actionButtonX["check"], actionbuttonY, actionButtonWidth, actionButtonHeight, humanPlayer.check, "check", WHITE),
             "fold": Button(actionButtonX["fold"], actionbuttonY, actionButtonWidth, actionButtonHeight, humanPlayer.fold, "fold", WHITE),
+            "raise": Button(actionButtonX["raise"], actionbuttonY, actionButtonWidth, actionButtonHeight, humanPlayer.call, "raise", WHITE),
+            "call": Button(actionButtonX["call"], actionbuttonY, actionButtonWidth, actionButtonHeight, humanPlayer.call, "call", WHITE)
         }) # buttonManager takes the buttons as dictionary so it is easy to link to button
         # numbers not used since it would get confusing as which button i am refering to
 
@@ -102,6 +112,8 @@ class GameController:
             screen.fill(POKERGREEN)
             self._buttons.drawAllButtons()
             self.drawCards()
+            screen.blit(cardBack, (AIPosX[0], AIPosY[0]))
+
             pygame.display.update()
             clock.tick(60) # 60 fps
 
@@ -110,7 +122,7 @@ class GameController:
     
     def getTurnHistory(self):
         return self._turn_history
-
+    
     def preFlop(self):
             # deals each player their hand -> then gives the cards their coordinates on the screen
             self._dealer.dealPlayerHands(self._players)
@@ -160,12 +172,13 @@ class GameController:
     def checkRoundEnd(self):
         # the round is considered ended when each player has made their turn
         # this condition will change when betting, i.e. essential feature balance system is added.
-
-        for action in self._turn_history:
-            if action == "raise":
-                print("raise reset round!")
-                self._currentPlayerTurn = 0 # reset player turn
-                # ^raisePOt must have quanitity restrictions bababababaab
+        if self._currentPlayerTurn > len(self._players) - 1:
+            for action in self._turn_history:
+                if action == "raise": # the turn for this round resets if someone raised. 
+                    print("raise reset round!")
+                    self._currentPlayerTurn = 0 # reset player turn
+                    self._turn_history = []
+                    # ^raisePot must have quanitity restrictions bababababaab
         return self._currentPlayerTurn > len(self._players) - 1
     
     def computerAction(self):
@@ -499,7 +512,6 @@ class AIPlayer(Player):
         # the simulations only work for 1 simulated oppponent, may change based on results?
         knownDeck = [card for card in deckCopy if card.getName() not in knownNamedCards]
 
-
         for simulation in range(0, simulations):
             # get a list of randomly picked cards for the community cards and the opponent hand cards.
             sampledCards = random.sample(knownDeck, cardsNeeded)
@@ -527,12 +539,16 @@ class AIPlayer(Player):
                 # add an all in chance and how get the call value!
                 self._action = self.raisePot # temp value to raise by
                 self._actionName = "raise"
+
             else:
                 self._action = self.call
                 self._actionName = "call"
+
         elif self._aggressiveness > self._bluffConstant:
+
             if self._aggressiveness > self._confidence:
                 self._action = self.raisePot # temp val
+
         else:
             self._action = self.fold
             self._actionName = "fold"

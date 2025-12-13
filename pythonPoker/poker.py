@@ -41,8 +41,8 @@ communityCardY = screenHeight - communityCardYGap
 
 # pygame.transform.scale(pygame.image.load(path), (cardWidth, cardHeight))
 cardBack = pygame.transform.scale(pygame.image.load("cardBacks/card_back_red.png"), (cardWidth, cardHeight)) # must be loaded outside the card class for performance.
-AIPosX = [handCardX[0]] # temp to see if image loads
-AIPosY = [handCardY - 600]
+AIPosX = {1: [handCardX[0], handCardX[1]]} # temp to see if image loads
+AIPosY = {1: screenHeight - screenHeight * 0.95}
 
 screen = pygame.display.set_mode((screenWidth, screenHeight))
 
@@ -100,10 +100,14 @@ class GameController:
                     if event.button == 1: # if left click
                         if self._buttons.checkButtonClicked() == True: # loops over all buttons to see if one was clicked
                             self.addToTurnHistory(self._buttons.getActionName())
-                            print(self.getTurnHistory())
+                            self.getTurnHistory()
                             self._currentPlayerTurn += 1
 
             if self.checkRoundEnd() == True: 
+                if self.checkPostRiver() == True:
+                    self.postRiver()
+                    time.sleep(1)
+                    self.reset()
                 # ^ after all players are done w/ their turn deal the next card essentially
                 self.startNextRound()
                 #print([card.getName() for card in self._communityCards])
@@ -112,7 +116,6 @@ class GameController:
             screen.fill(POKERGREEN)
             self._buttons.drawAllButtons()
             self.drawCards()
-            screen.blit(cardBack, (AIPosX[0], AIPosY[0]))
 
             pygame.display.update()
             clock.tick(60) # 60 fps
@@ -132,6 +135,12 @@ class GameController:
                         # this loop gets the index of the card in the player hand#
                         # then at that same index in the handCardX list, that x-coordinate is given
                         card.setPos(handCardX[index], handCardY)
+                elif player._isHuman == False:
+                    AiIndex = self._players.index(player)
+                    for index, card in enumerate(player._hand):
+                        handCardPosXList = AIPosX[AiIndex]
+                        handCardPosY = AIPosY[AiIndex]
+                        card.setPos(handCardPosXList[index], handCardPosY)
         
     def flop(self):
         # 3 cards are dealt from the deck and added to the GameController's self._communityCard list
@@ -167,8 +176,15 @@ class GameController:
         for index, card in enumerate(self._players[0]._hand):
                     card.setPos(handCardX[index], handCardY)
         """
+        # self.evaluatePlayerHands()
+    
+    def postRiver(self):
         self.evaluatePlayerHands()
+        print(self.decideWinner())
 
+    def checkPostRiver(self):
+        return self._gameTurn == 3
+        
     def checkRoundEnd(self):
         # the round is considered ended when each player has made their turn
         # this condition will change when betting, i.e. essential feature balance system is added.
@@ -187,7 +203,7 @@ class GameController:
             return None # return None for now -> change to something better later?
         self._currentPlayerTurn += 1
         currentPlayer.monteCarloSimulation(10000, self._communityCards)
-        self.addToTurnHistory(currentPlayer.getActionName()) # bobbobobobbobobobobob
+        self.addToTurnHistory(currentPlayer.getActionName()) 
         currentPlayer.doAction()
 
     def startNextRound(self):
@@ -197,10 +213,14 @@ class GameController:
 
     def drawCards(self):
         for player in self._players:
-            for card in player._hand:
-                if card._x != None and card._y != None: # was trying to draw AI cards and error 
-                    card.draw() # draw to screen not from hand
-
+            if player._isHuman == True or self.checkPostRiver() and self.checkRoundEnd():
+                for card in player._hand:
+                    if card._x != None and card._y != None: # was trying to draw AI cards and error 
+                        card.draw() # draw to screen not from hand
+            else:
+                 for card in player._hand:
+                    if card._x != None and card._y != None: # was trying to draw AI cards and error 
+                        card.drawCardBack() # draw to screen not from hand
         for card in self._communityCards:
             if card._x != None and card._y != None:
                 card.draw()
@@ -365,6 +385,17 @@ class GameController:
                 winner = player # TODO: tied cases????
         return winner
 
+    def reset(self):
+        self._dealer.recreateDeck()
+        self._communityCards = []
+        self._currentPlayerTurn = 0
+        self._gameTurn = 0
+
+        for player in self._players:
+            player._hand = []  
+            player._evaluatedHand = ""  
+            player._isFolded = False  
+
 class Dealer:
     def __init__(self):
         self._deck = Deck().createDeck() # list of 52 Card objects, in order
@@ -403,6 +434,9 @@ class Dealer:
                 card = self.dealCard()
                 player.giveCard(card)
 
+    def recreateDeck(self):
+        self._deck = Deck.createDeck()
+        
 
 class Card:
     def __init__(self, value, suit, loadImage=True):
@@ -429,8 +463,12 @@ class Card:
     def draw(self):
         screen.blit(self._image, (self._x, self._y))
 
+    def drawCardBack(self):
+        screen.blit(cardBack, (self._x, self._y))
+
     def setPos(self, x, y):
         self._x, self._y = x, y
+
 
 class Deck:
     def __init__(self):
@@ -475,7 +513,8 @@ class Player:
         print(f"raising by {amount}")
 
     def call(self):
-        print("calling")
+        # print("calling")
+        pass
 
 
 class AIPlayer(Player):
@@ -528,7 +567,7 @@ class AIPlayer(Player):
             if gameEnv.decideWinner() == self:
                 wins += 1
 
-        print(f"after {simulations} simulations this AI won {wins} times")
+        # print(f"after {simulations} simulations this AI won {wins} times")
         # print(time.time() - startTime)
         self.attributeMath(wins, simulations)
     

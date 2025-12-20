@@ -6,7 +6,7 @@ import time
 pygame.init()
 pygame.font.init()
 font = pygame.font.SysFont("Consolas", 35)
-screenWidth, screenHeight = 1800, 1000
+screenWidth, screenHeight = 1600, 900
 POKERGREEN = pygame.Color("#3c7257")
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -60,7 +60,7 @@ class GameController:
             # the action of the button e,g, humanPlayer.check comes from the previously created humanPlayer which is why humanPlayer is created before this
             "check": Button(actionButtonX["check"], actionbuttonY, actionButtonWidth, actionButtonHeight, humanPlayer.check, "check", WHITE),
             "fold": Button(actionButtonX["fold"], actionbuttonY, actionButtonWidth, actionButtonHeight, humanPlayer.fold, "fold", WHITE),
-            "raise": Button(actionButtonX["raise"], actionbuttonY, actionButtonWidth, actionButtonHeight, humanPlayer.call, "raise", WHITE),
+            "raise": Button(actionButtonX["raise"], actionbuttonY, actionButtonWidth, actionButtonHeight, humanPlayer.raisePot, "raise", WHITE),
             "call": Button(actionButtonX["call"], actionbuttonY, actionButtonWidth, actionButtonHeight, humanPlayer.call, "call", WHITE)
         }) # buttonManager takes the buttons as dictionary so it is easy to link to button
         # numbers not used since it would get confusing as which button i am refering to
@@ -85,6 +85,7 @@ class GameController:
                         "one pair": 2,
                         "high card": 1}
         self._turn_history = []
+        self._playersNeedToAct = []
 
     def gameLoop(self):
         AIPlayer1 = AIPlayer("monte")
@@ -102,8 +103,11 @@ class GameController:
                             self.addToTurnHistory(self._buttons.getActionName())
                             self.getTurnHistory()
                             self._currentPlayerTurn += 1
+                            self.removeFromActionList() # IS THIS BAD OR MESSY IDK????
 
             if self.checkRoundEnd() == True: 
+                self._playersNeedToAct = []
+                self._turn_history = []
                 if self.checkPostRiver() == True:
                     self.postRiver()
                     time.sleep(1)
@@ -113,6 +117,7 @@ class GameController:
                 #print([card.getName() for card in self._communityCards])
 
             self.computerAction()
+            self.setRequiredActions()
             screen.fill(POKERGREEN)
             self._buttons.drawAllButtons()
             self.drawCards()
@@ -126,6 +131,23 @@ class GameController:
     def getTurnHistory(self):
         return self._turn_history
     
+    def setRequiredActions(self):
+        # print(self._turn_history)
+        for index, turn in enumerate(self._turn_history):
+            if turn == "raise":  
+                startIndex = index + 1
+                endIndex = index 
+                playerStartSlice = self._players[startIndex:]
+                playerEndSlice = self._players[:endIndex]
+                self._playersNeedToAct = playerStartSlice + playerEndSlice
+        # print(f"AFTER FUNCTION {self._playersNeedToAct}")
+
+    def removeFromActionList(self):
+        print("BOB1", self._playersNeedToAct)    
+        if self._playersNeedToAct:
+            self._playersNeedToAct.pop() # is this 0????
+            print("Bob 2", self._playersNeedToAct)
+
     def preFlop(self):
             # deals each player their hand -> then gives the cards their coordinates on the screen
             self._dealer.dealPlayerHands(self._players)
@@ -189,22 +211,32 @@ class GameController:
         # the round is considered ended when each player has made their turn
         # this condition will change when betting, i.e. essential feature balance system is added.
         if self._currentPlayerTurn > len(self._players) - 1:
+            # print(self._playersNeedToAct)
+            if self._playersNeedToAct:
+                self._currentPlayerTurn = 0
+                self._turn_history = [] 
+            """
             for action in self._turn_history:
                 if action == "raise": # the turn for this round resets if someone raised. 
                     print("raise reset round!")
                     self._currentPlayerTurn = 0 # reset player turn
-                    self._turn_history = []
+                    self._turn_history = []     
                     # ^raisePot must have quanitity restrictions bababababaab
+            """
         return self._currentPlayerTurn > len(self._players) - 1
     
     def computerAction(self):
         currentPlayer = self._players[self._currentPlayerTurn]
         if currentPlayer._isHuman == True: # do not do an AI's turn if waiting for player to press button and do their turn
-            return None # return None for now -> change to something better later?
+            return False # return None for now -> change to something better later?
         self._currentPlayerTurn += 1
         currentPlayer.monteCarloSimulation(10000, self._communityCards)
         self.addToTurnHistory(currentPlayer.getActionName()) 
         currentPlayer.doAction()
+        print(self._turn_history)
+        self.removeFromActionList()
+        
+        return True
 
     def startNextRound(self):
         self._currentPlayerTurn = 0 # starting player will be at the 0th index
@@ -221,6 +253,7 @@ class GameController:
                  for card in player._hand:
                     if card._x != None and card._y != None: # was trying to draw AI cards and error 
                         card.drawCardBack() # draw to screen not from hand
+
         for card in self._communityCards:
             if card._x != None and card._y != None:
                 card.draw()
@@ -396,6 +429,7 @@ class GameController:
             player._evaluatedHand = ""  
             player._isFolded = False  
 
+
 class Dealer:
     def __init__(self):
         self._deck = Deck().createDeck() # list of 52 Card objects, in order
@@ -435,7 +469,7 @@ class Dealer:
                 player.giveCard(card)
 
     def recreateDeck(self):
-        self._deck = Deck.createDeck()
+        self._deck = Deck().createDeck()
         
 
 class Card:
@@ -509,11 +543,11 @@ class Player:
     def addToGame(self, playerList):
         playerList.append(self)
     
-    def raisePot(self, amount):
-        print(f"raising by {amount}")
+    def raisePot(self):
+        print("raising by 1000")
 
     def call(self):
-        # print("calling")
+        print("calling")
         pass
 
 
@@ -525,13 +559,11 @@ class AIPlayer(Player):
         self._action = self.check # temp action value
         self._actionName = "check"
         self._bluffConstant = 1 / random.randint(1, 100) # random float value betwwen 0.01 and 1
-        self._aggressiveness =  1 / random.randint(1, 100) 
+        self._aggressiveness =  1 / random.randint(1, 10) 
         self._confidence = 1 / random.randint(20, 55) # idk rn? 0.x as a average value??
         self._tiltLevel = 0 # decide later ^^^
     
     def doAction(self):
-        if self._action == self.raisePot:
-            return self._action(100)
         return self._action()
     
     def getActionName(self):
@@ -573,6 +605,9 @@ class AIPlayer(Player):
     
     def attributeMath(self, wins, simulations):
         winrate = wins / simulations
+        self._action = self.raisePot
+        self._actionName = "raise"   
+        return 
         if winrate > self._confidence:
             if self._aggressiveness > self._confidence:
                 # add an all in chance and how get the call value!
@@ -616,7 +651,6 @@ class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
     def wasClicked(self):
         if self.collidepoint(pygame.mouse.get_pos()):
             # if the player clicks this button then hadouken! do the button's action
-            self._action()
             return True # signifies yes this button has been pressed
         else:
             return False # returns False if the button was not pressed
@@ -624,26 +658,29 @@ class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
     def getActionName(self):
         if self.checkButtonClicked():
             return self.button._action
+    
+    def runAction(self):
+        return self._action()
 
 
 class ButtonManager:
     def __init__(self, buttons):
-        self._buttons = buttons # buttons is a dict()
+        self._buttons = buttons # buttons is a dict(buttonName:buttonObject)
 
     def checkButtonClicked(self):
         clicked = False # starts false and remains unchanged if a button was not pressed
-        for buttonName in self._buttons: # loops over dict() keys
+        for buttonName, button in self._buttons.items(): # loops over dict() keys
             if self._buttons[buttonName].wasClicked() == True:
+                button.runAction()
                 clicked = True
         return clicked # this function is needed to check that a button has been pressed 
     # so i can change the game state accorindgly
 
     # RENAME THIS FUNCTION LATER
     def getActionName(self):
-        if self.checkButtonClicked():
-            for buttonName in self._buttons: # loops over dict() keys
-                if self._buttons[buttonName].wasClicked() == True:
-                    return buttonName
+        for buttonName in self._buttons: # loops over dict() keys
+            if self._buttons[buttonName].wasClicked() == True:
+                return buttonName
 
     def drawAllButtons(self):
         for buttonName in self._buttons:

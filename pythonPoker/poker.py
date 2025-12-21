@@ -84,8 +84,8 @@ class GameController:
                         "two pair": 3,
                         "one pair": 2,
                         "high card": 1}
-        self._turn_history = []
         self._playersNeedToAct = []
+        self._raiseOccured = False
 
     def gameLoop(self):
         AIPlayer1 = AIPlayer("monte")
@@ -100,14 +100,11 @@ class GameController:
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1: # if left click
                         if self._buttons.checkButtonClicked() == True: # loops over all buttons to see if one was clicked
-                            self.addToTurnHistory(self._buttons.getActionName())
-                            self.getTurnHistory()
                             self._currentPlayerTurn += 1
-                            self.removeFromActionList() # IS THIS BAD OR MESSY IDK????
+                            self.processAction(self._buttons.getActionName())
 
-            if self.checkRoundEnd() == True: 
-                self._playersNeedToAct = []
-                self._turn_history = []
+            # print("just bfore check round,", self._playersNeedToAct)
+            if self.checkRoundEnd() == True:
                 if self.checkPostRiver() == True:
                     self.postRiver()
                     time.sleep(1)
@@ -117,7 +114,6 @@ class GameController:
                 #print([card.getName() for card in self._communityCards])
 
             self.computerAction()
-            self.setRequiredActions()
             screen.fill(POKERGREEN)
             self._buttons.drawAllButtons()
             self.drawCards()
@@ -125,28 +121,19 @@ class GameController:
             pygame.display.update()
             clock.tick(60) # 60 fps
 
-    def addToTurnHistory(self, name):
-        self._turn_history.append(name)
-    
-    def getTurnHistory(self):
-        return self._turn_history
-    
-    def setRequiredActions(self):
-        # print(self._turn_history)
-        for index, turn in enumerate(self._turn_history):
-            if turn == "raise":  
-                startIndex = index + 1
-                endIndex = index 
-                playerStartSlice = self._players[startIndex:]
-                playerEndSlice = self._players[:endIndex]
-                self._playersNeedToAct = playerStartSlice + playerEndSlice
-        # print(f"AFTER FUNCTION {self._playersNeedToAct}")
+    def processAction(self, name):
+        if name == "raise":
+            self._raiseOccured = True
+            self.processRaiseTurns()
+        else:
+            if self._playersNeedToAct:
+                self._playersNeedToAct.remove(self._players[self._currentPlayerTurn - 1])
+                # print("inside fun", self._playersNeedToAct)
 
-    def removeFromActionList(self):
-        print("BOB1", self._playersNeedToAct)    
-        if self._playersNeedToAct:
-            self._playersNeedToAct.pop() # is this 0????
-            print("Bob 2", self._playersNeedToAct)
+    def processRaiseTurns(self):
+        for player in self._players:
+            if player != self._players[self._currentPlayerTurn - 1]: # could be -1 due to order
+                self._playersNeedToAct.append(player)
 
     def preFlop(self):
             # deals each player their hand -> then gives the cards their coordinates on the screen
@@ -210,11 +197,11 @@ class GameController:
     def checkRoundEnd(self):
         # the round is considered ended when each player has made their turn
         # this condition will change when betting, i.e. essential feature balance system is added.
-        if self._currentPlayerTurn > len(self._players) - 1:
-            # print(self._playersNeedToAct)
-            if self._playersNeedToAct:
-                self._currentPlayerTurn = 0
-                self._turn_history = [] 
+        if self._raiseOccured == True and not self._playersNeedToAct:
+            self._currentPlayerTurn = 0
+            return True
+        
+        if self._currentPlayerTurn > len(self._players) - 1 and self._raiseOccured == False:
             """
             for action in self._turn_history:
                 if action == "raise": # the turn for this round resets if someone raised. 
@@ -223,19 +210,17 @@ class GameController:
                     self._turn_history = []     
                     # ^raisePot must have quanitity restrictions bababababaab
             """
-        return self._currentPlayerTurn > len(self._players) - 1
+            return self._currentPlayerTurn > len(self._players) - 1
     
     def computerAction(self):
+        print(self._players, self._currentPlayerTurn)
         currentPlayer = self._players[self._currentPlayerTurn]
         if currentPlayer._isHuman == True: # do not do an AI's turn if waiting for player to press button and do their turn
-            return False # return None for now -> change to something better later?
+            return False 
         self._currentPlayerTurn += 1
         currentPlayer.monteCarloSimulation(10000, self._communityCards)
-        self.addToTurnHistory(currentPlayer.getActionName()) 
         currentPlayer.doAction()
-        print(self._turn_history)
-        self.removeFromActionList()
-        
+        self.processAction(currentPlayer._actionName)
         return True
 
     def startNextRound(self):

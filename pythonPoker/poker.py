@@ -5,11 +5,16 @@ import time
 
 pygame.init()
 pygame.font.init()
-font = pygame.font.SysFont("Consolas", 35)
+fontConsolas = pygame.font.SysFont("Consolas", 35)
+fontVerdana = pygame.font.SysFont("Verdana", 32)
+
 screenWidth, screenHeight = 1600, 900
 POKERGREEN = pygame.Color("#3c7257")
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
+GREY = (210, 210, 210)
+RED = (255, 180, 180)
+
 actionButtonWidth, actionButtonHeight = 120, 40
 # calculate the button x coordinate so that they are mathematically equally spaced across the screen
 # since its going to be 3 buttons displayed at a time the x coordinates are decided by multipying the screen width by 0.25 * n
@@ -22,6 +27,8 @@ actionbuttonY = screenHeight - 70 # each action button will share the same heigh
 # ^ both X and Y coords are calculated from screenHeight so that it scales accordingly
 cardWidth = 125
 cardHeight = 182
+tableWidth = 1400 # original 735
+tableHeight = 700 # original 350
 handCardXGap = 5 # horizontal pixel distance between 2 cards
 handCardYGap = 275 # refers to pixel distance from bottom of screen
 handCardX = [(screenWidth / 2 - cardWidth - handCardXGap), screenWidth / 2]
@@ -40,11 +47,40 @@ communityCardX = [
 communityCardY = screenHeight - communityCardYGap
 
 # pygame.transform.scale(pygame.image.load(path), (cardWidth, cardHeight))
+pokerTableX = (screenWidth - tableWidth) / 2
+pokerTableY = (screenHeight - tableHeight) / 2
+pokerTable = pygame.transform.scale(pygame.image.load("table/poker_table.png"), (tableWidth, tableHeight))
 cardBack = pygame.transform.scale(pygame.image.load("cardBacks/card_back_red.png"), (cardWidth, cardHeight)) # must be loaded outside the card class for performance.
-AIPosX = {1: [handCardX[0], handCardX[1]]} # temp to see if image loads
-AIPosY = {1: screenHeight - screenHeight * 0.95}
+
+# AI Positions (clockwise from player's left)
+AIPosX = {
+    1: [screenWidth * 0.05, screenWidth * 0.05 + cardWidth + handCardXGap],  # lower left (player's left)
+    2: [screenWidth * 0.05, screenWidth * 0.05 + cardWidth + handCardXGap],  # upper left
+    3: [handCardX[0], handCardX[1]],  # top center
+    4: [screenWidth * 0.80, screenWidth * 0.80 + cardWidth + handCardXGap],  # upper right
+    5: [screenWidth * 0.80, screenWidth * 0.80 + cardWidth + handCardXGap]   # lower right (player's right)
+}
+
+AIPosY = {
+    1: handCardY - cardHeight / 2,  # lower left (half card height above player)
+    2: screenHeight * 0.05 + cardHeight / 2,  # upper left (half card height below top)
+    3: screenHeight * 0.05,  # top center
+    4: screenHeight * 0.05 + cardHeight / 2,  # upper right (half card height below top)
+    5: handCardY - cardHeight / 2   # lower right (half card height above player)
+}
+
+AINames = { 
+    1: "sharky",
+    2: "rusher",
+    3: "stackz",
+    4: "sphinx",
+    5: "richy"
+}
 
 screen = pygame.display.set_mode((screenWidth, screenHeight))
+
+# TODO: IMPLEMENT FOLD -> active players instead of self._players 
+# TODO: THE AI MIGHT BE RETARDED?
 
 class GameController:
     def __init__(self):
@@ -84,57 +120,125 @@ class GameController:
                         "two pair": 3,
                         "one pair": 2,
                         "high card": 1}
-        self._playersNeedToAct = []
-        self._raiseOccured = False
+        self._raiseHappened = False
+        self._waitingForPlayer = True # at the very start of the game i will make the player be the first person to go.
+        self._roundCycleFinished = False
+        self._raiser = None
+        self._clearActions = False
 
     def gameLoop(self):
-        AIPlayer1 = AIPlayer("monte")
-        AIPlayer1.addToGame(self._players)
+        for nameIndex in AINames.keys():
+            AIPlayer(AINames[nameIndex]).addToGame(self._players)
+        # AIPlayer1 = AIPlayer()
+        # AIPlayer1.addToGame(self._players)
         self._dealer.shuffle() # must shuffle at beggining of every game 
         self.preFlop()
         clock = pygame.time.Clock()
+        
         while True:
+            currentPlayer = self._players[self._currentPlayerTurn]
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     exit()
                 if event.type == pygame.MOUSEBUTTONDOWN:
+                    # if self._waitingForPlayer:
                     if event.button == 1: # if left click
                         if self._buttons.checkButtonClicked() == True: # loops over all buttons to see if one was clicked
-                            self._currentPlayerTurn += 1
-                            self.processAction(self._buttons.getActionName())
+                            if self._clearActions == True:
+                                self.resetAIActionNames()
+                            self.processAction(self._buttons.getActionName(), currentPlayer)
+                            self._currentPlayerTurn += 1 # must change -> flag system!
+                            if self.roundEnded():
+                                self._currentPlayerTurn = 0
+                                self._roundCycleFinished = True
+                            # self._waitingForPlayer = False
+                        # ending wrong, it should just check if its 2 then set to 0 insta, not end round
 
-            # print("just bfore check round,", self._playersNeedToAct)
-            if self.checkRoundEnd() == True:
-                if self.checkPostRiver() == True:
+            if self._raiseHappened:
+                if self.raiseCycleFinished():
+                    if self.checkPostRiver():
+                        self.postRiver()
+                        self.revealAICards()
+                        pygame.display.update()
+                        self.waitForInput()
+                        self.reset()
+                        self.preFlop()
+                    # ^ after all players are done w/ their turn deal the next card essentially
+                    else:
+                        self.startNextRound()
+                        self._roundCycleFinished = False
+                        self._raiseHappened = False
+
+            elif self._roundCycleFinished and not self._raiseHappened:
+                if self.checkPostRiver():
                     self.postRiver()
-                    time.sleep(1)
+                    self.revealAICards()
+                    pygame.display.update()
+                    self.waitForInput()
                     self.reset()
+                    self.preFlop()
                 # ^ after all players are done w/ their turn deal the next card essentially
-                self.startNextRound()
-                #print([card.getName() for card in self._communityCards])
+                else:
+                    self.startNextRound()
+                    self._roundCycleFinished = False
+                    self._raiseHappened = False
+                #print([card.getName() for card in self._communityCards]
 
-            self.computerAction()
+            # if not self._waitingForPlayer:
+            if not currentPlayer._isHuman:
+                if self.computerAction(): # returns true or false
+                    self.processAction(currentPlayer._actionName, currentPlayer)
+                    
+                    if self.roundEnded():
+                        self._currentPlayerTurn = 0
+                        self._roundCycleFinished = True
+                    # self.setWaitingForPlayer(currentPlayer) # change only occurs if the next player in turn is human
             screen.fill(POKERGREEN)
+            self.drawTable()
             self._buttons.drawAllButtons()
             self.drawCards()
+            self.drawAINames()
+            self.drawActionNames()
 
             pygame.display.update()
             clock.tick(60) # 60 fps
 
-    def processAction(self, name):
-        if name == "raise":
-            self._raiseOccured = True
-            self.processRaiseTurns()
-        else:
-            if self._playersNeedToAct:
-                self._playersNeedToAct.remove(self._players[self._currentPlayerTurn - 1])
-                # print("inside fun", self._playersNeedToAct)
+    def processRaiseTurns(self): # must set to false at end
+        # if self._raiseHappened == True:
+        self._currentPlayerTurn = 0
+        self._raiseHappened = False
 
-    def processRaiseTurns(self):
-        for player in self._players:
-            if player != self._players[self._currentPlayerTurn - 1]: # could be -1 due to order
-                self._playersNeedToAct.append(player)
+    def raiseCycleFinished(self):
+        if self.getNextPlayerTurn() == self._raiser:
+            return True
+        return False
+    
+    def getNextPlayerTurn(self):
+        if self._currentPlayerTurn >= len(self._players):
+            return self._players[0]
+        return self._players[self._currentPlayerTurn]
 
+    def processAction(self, action, player):
+        if action == "raise":
+            self._raiseHappened = True
+            self._raiser = player
+
+    def setWaitingForPlayer(self, currentPlayer):
+        print("YE!")
+        if currentPlayer._isHuman:
+            print("YEEEE")
+            self._waitingForPlayer = True
+
+    def waitForInput(self):
+        waitingForInput = True
+        while waitingForInput:
+            events = pygame.event.get()
+            for event in events:
+                if event.type == pygame.QUIT:
+                    exit()
+                if event.type == pygame.MOUSEBUTTONDOWN or event.type == pygame.KEYDOWN:
+                    waitingForInput = False
+                
     def preFlop(self):
             # deals each player their hand -> then gives the cards their coordinates on the screen
             self._dealer.dealPlayerHands(self._players)
@@ -185,7 +289,7 @@ class GameController:
         for index, card in enumerate(self._players[0]._hand):
                     card.setPos(handCardX[index], handCardY)
         """
-        # self.evaluatePlayerHands()
+        # self.evaluatePlayerHands() now done in the post river
     
     def postRiver(self):
         self.evaluatePlayerHands()
@@ -194,33 +298,25 @@ class GameController:
     def checkPostRiver(self):
         return self._gameTurn == 3
         
-    def checkRoundEnd(self):
-        # the round is considered ended when each player has made their turn
-        # this condition will change when betting, i.e. essential feature balance system is added.
-        if self._raiseOccured == True and not self._playersNeedToAct:
-            self._currentPlayerTurn = 0
+    # current player turn gets to len(players) + 1
+    def roundEnded(self):
+        if self._currentPlayerTurn > len(self._players) - 1:
+            self._clearActions = True
             return True
-        
-        if self._currentPlayerTurn > len(self._players) - 1 and self._raiseOccured == False:
-            """
-            for action in self._turn_history:
-                if action == "raise": # the turn for this round resets if someone raised. 
-                    print("raise reset round!")
-                    self._currentPlayerTurn = 0 # reset player turn
-                    self._turn_history = []     
-                    # ^raisePot must have quanitity restrictions bababababaab
-            """
-            return self._currentPlayerTurn > len(self._players) - 1
     
     def computerAction(self):
-        print(self._players, self._currentPlayerTurn)
+        if self._currentPlayerTurn >= len(self._players):
+            return False
+        
         currentPlayer = self._players[self._currentPlayerTurn]
+
         if currentPlayer._isHuman == True: # do not do an AI's turn if waiting for player to press button and do their turn
-            return False 
+            return False # return None for now -> change to something better later?
+        
         self._currentPlayerTurn += 1
         currentPlayer.monteCarloSimulation(10000, self._communityCards)
         currentPlayer.doAction()
-        self.processAction(currentPlayer._actionName)
+
         return True
 
     def startNextRound(self):
@@ -228,9 +324,15 @@ class GameController:
         self._gameTurn += 1 # goes to the next game turn e.g self.flop -> self.turn
         self.gameTurnState[self._gameTurn]() # calls the function from the key-value pair
 
+    def resetAIActionNames(self):
+        for player in self._players:
+            if not player._isHuman:
+                player._actionName = ""
+                # print(player.getActionName()) USED FOR DEBUGGING
+
     def drawCards(self):
         for player in self._players:
-            if player._isHuman == True or self.checkPostRiver() and self.checkRoundEnd():
+            if player._isHuman == True: #or self.checkPostRiver() and not player._isHuman and self._roundCycleFinished and not self._raiseHappened:
                 for card in player._hand:
                     if card._x != None and card._y != None: # was trying to draw AI cards and error 
                         card.draw() # draw to screen not from hand
@@ -242,7 +344,30 @@ class GameController:
         for card in self._communityCards:
             if card._x != None and card._y != None:
                 card.draw()
-    
+        
+    def drawTable(self):
+        screen.blit(pokerTable, (pokerTableX, pokerTableY))
+
+    def drawAINames(self):
+        for posIndex in AINames.keys():
+            nameText = fontVerdana.render((AINames[posIndex]), True , WHITE)
+            screen.blit(nameText, (AIPosX[posIndex][0], AIPosY[posIndex] + cardHeight))
+
+    def drawActionNames(self):
+        for posIndex in AINames.keys():
+            AIAction = self._players[posIndex].getActionName()
+            if AIAction != "":
+                # print("SKIBI")
+                actionText = fontVerdana.render(AIAction, True, GREY)
+                screen.blit(actionText, (AIPosX[posIndex][1], AIPosY[posIndex] + cardHeight))
+
+    def revealAICards(self):
+        for player in self._players:
+            if player._isHuman == False:
+                for card in player._hand:
+                    if card._x != None and card._y != None: 
+                        card.draw() # draw to screen not from hand
+
     # takes the 2 player cards and community cards as one list
     def hasFlush(self, mergedCards): 
         # dictionary to keep track of the highest suit.
@@ -408,6 +533,10 @@ class GameController:
         self._communityCards = []
         self._currentPlayerTurn = 0
         self._gameTurn = 0
+        self._raiser = None
+        self._raiseHappened = False
+        self._roundCycleFinished = False
+        self._dealer.shuffle()
 
         for player in self._players:
             player._hand = []  
@@ -515,7 +644,7 @@ class Player:
         self._isHuman = True
 
     def fold(self):
-        # print("I FOLDED")
+        print("I FOLDED")
         self._isFolded = True
 
     def check(self): # skips player turn, if previous turn was check or nothing
@@ -542,15 +671,15 @@ class AIPlayer(Player):
         self._name = name
         self._isHuman = False
         self._action = self.check # temp action value
-        self._actionName = "check"
+        self._actionName = ""
         self._bluffConstant = 1 / random.randint(1, 100) # random float value betwwen 0.01 and 1
-        self._aggressiveness =  1 / random.randint(1, 10) 
-        self._confidence = 1 / random.randint(20, 55) # idk rn? 0.x as a average value??
-        self._tiltLevel = 0 # decide later ^^^
+        self._aggressiveness =  1 / random.randint(30, 50) 
+        self._confidence = 1 / random.randint(20, 75) # idk rn? 0.x as a average value??
+        # self._tiltLevel = 0 # decide later ^^^
     
     def doAction(self):
         return self._action()
-    
+
     def getActionName(self):
         return self._actionName
     
@@ -590,21 +719,21 @@ class AIPlayer(Player):
     
     def attributeMath(self, wins, simulations):
         winrate = wins / simulations
-        self._action = self.raisePot
-        self._actionName = "raise"   
-        return 
         if winrate > self._confidence:
             if self._aggressiveness > self._confidence:
                 # add an all in chance and how get the call value!
                 self._action = self.raisePot # temp value to raise by
                 self._actionName = "raise"
 
-            else:
+            elif self._confidence - self._aggressiveness > 0.1:
                 self._action = self.call
                 self._actionName = "call"
+            
+            else:
+                self._action = self.fold
+                self._actionName = "fold"
 
         elif self._aggressiveness > self._bluffConstant:
-
             if self._aggressiveness > self._confidence:
                 self._action = self.raisePot # temp val
 
@@ -621,7 +750,7 @@ class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
     def __init__(self, x, y, width, height, action, text, color):
         super().__init__(x, y, width, height)
         self._action = action
-        self._text = font.render(text, True, BLACK)
+        self._text = fontConsolas.render(text, True, BLACK)
         self._color = color
         self._active = True
 

@@ -85,6 +85,7 @@ screen = pygame.display.set_mode((screenWidth, screenHeight))
 class GameController:
     def __init__(self):
         self._players = [] # list of Player() sublasses [AI/HUMAN] objects
+        self._activePlayers = []
         self._communityCards = [] # list of Card objects
         self._dealer = Dealer() # deck created in Dealer class
         self._currentPlayerTurn = 0
@@ -129,8 +130,8 @@ class GameController:
     def gameLoop(self):
         for nameIndex in AINames.keys():
             AIPlayer(AINames[nameIndex]).addToGame(self._players)
-        # AIPlayer1 = AIPlayer()
-        # AIPlayer1.addToGame(self._players)
+
+        self._activePlayers = self._players
         self._dealer.shuffle() # must shuffle at beggining of every game 
         self.preFlop()
         clock = pygame.time.Clock()
@@ -158,11 +159,6 @@ class GameController:
                 if self.raiseCycleFinished():
                     if self.checkPostRiver():
                         self.postRiver()
-                        self.revealAICards()
-                        pygame.display.update()
-                        self.waitForInput()
-                        self.reset()
-                        self.preFlop()
                     # ^ after all players are done w/ their turn deal the next card essentially
                     else:
                         self.startNextRound()
@@ -172,11 +168,6 @@ class GameController:
             elif self._roundCycleFinished and not self._raiseHappened:
                 if self.checkPostRiver():
                     self.postRiver()
-                    self.revealAICards()
-                    pygame.display.update()
-                    self.waitForInput()
-                    self.reset()
-                    self.preFlop()
                 # ^ after all players are done w/ their turn deal the next card essentially
                 else:
                     self.startNextRound()
@@ -294,6 +285,11 @@ class GameController:
     def postRiver(self):
         self.evaluatePlayerHands()
         print(self.decideWinner())
+        self.revealAICards()
+        pygame.display.update()
+        self.waitForInput()
+        self.reset()
+        self.preFlop()
 
     def checkPostRiver(self):
         return self._gameTurn == 3
@@ -673,7 +669,7 @@ class AIPlayer(Player):
         self._action = self.check # temp action value
         self._actionName = ""
         self._bluffConstant = 1 / random.randint(1, 100) # random float value betwwen 0.01 and 1
-        self._aggressiveness =  1 / random.randint(30, 50) 
+        self._aggressiveness =  1 / random.randint(75, 80) 
         self._confidence = 1 / random.randint(20, 75) # idk rn? 0.x as a average value??
         # self._tiltLevel = 0 # decide later ^^^
     

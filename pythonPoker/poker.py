@@ -1,4 +1,3 @@
-import copy
 import pygame
 import random
 import time
@@ -23,7 +22,7 @@ actionButtonX = {"check": (int(screenWidth * 0.20)) - actionButtonWidth / 2,
                  "fold": (int(screenWidth * 0.40)) - actionButtonWidth / 2,
                  "raise": (int(screenWidth * 0.60)) - actionButtonWidth / 2,
                  "call": (int(screenWidth * 0.80)) - actionButtonWidth / 2}
-actionbuttonY = screenHeight - 70 # each action button will share the same height
+actionbuttonY = screenHeight - 80 # each action button will share the same height
 # ^ both X and Y coords are calculated from screenHeight so that it scales accordingly
 cardWidth = 125
 cardHeight = 182
@@ -47,18 +46,19 @@ communityCardX = [
 communityCardY = screenHeight - communityCardYGap
 
 # pygame.transform.scale(pygame.image.load(path), (cardWidth, cardHeight))
+pokerTableYSpacer = 20
 pokerTableX = (screenWidth - tableWidth) / 2
-pokerTableY = (screenHeight - tableHeight) / 2
+pokerTableY = (screenHeight - tableHeight) / 2 - pokerTableYSpacer
 pokerTable = pygame.transform.scale(pygame.image.load("table/poker_table.png"), (tableWidth, tableHeight))
 cardBack = pygame.transform.scale(pygame.image.load("cardBacks/card_back_red.png"), (cardWidth, cardHeight)) # must be loaded outside the card class for performance.
 
-# AI Positions (clockwise from player's left)
+# AI positions -> clockwise from player's left
 AIPosX = {
-    1: [screenWidth * 0.05, screenWidth * 0.05 + cardWidth + handCardXGap],  # lower left (player's left)
-    2: [screenWidth * 0.05, screenWidth * 0.05 + cardWidth + handCardXGap],  # upper left
+    1: [screenWidth * 0.23 - cardWidth * 2 - handCardXGap, screenWidth * 0.23 - cardWidth + handCardXGap],  # lower left (player's left)
+    2: [screenWidth * 0.23 - cardWidth * 2 - handCardXGap, screenWidth * 0.23 - cardWidth + handCardXGap],  # upper left
     3: [handCardX[0], handCardX[1]],  # top center
-    4: [screenWidth * 0.80, screenWidth * 0.80 + cardWidth + handCardXGap],  # upper right
-    5: [screenWidth * 0.80, screenWidth * 0.80 + cardWidth + handCardXGap]   # lower right (player's right)
+    4: [screenWidth * 0.77, screenWidth * 0.77 + cardWidth + handCardXGap],  # upper right
+    5: [screenWidth * 0.77, screenWidth * 0.77 + cardWidth + handCardXGap]   # lower right (player's right)
 }
 
 AIPosY = {
@@ -78,9 +78,6 @@ AINames = {
 }
 
 screen = pygame.display.set_mode((screenWidth, screenHeight))
-
-# TODO: IMPLEMENT FOLD -> active players instead of self._players 
-# TODO: THE AI MIGHT BE RETARDED?
 
 class GameController:
     def __init__(self):
@@ -126,18 +123,22 @@ class GameController:
         self._roundCycleFinished = False
         self._raiser = None
         self._clearActions = False
+        self._initalMinCall = 5
+        self._moneyLimits = {"call": 5, "raise": self._initalMinCall * 2}
+        self._availableActions = ["call", "check", "fold", "raise"]
 
     def gameLoop(self):
         for nameIndex in AINames.keys():
             AIPlayer(AINames[nameIndex]).addToGame(self._players)
+        # self._activePlayers.append(self._players[0])
+        self._activePlayers += self._players[:]
 
-        self._activePlayers = self._players
         self._dealer.shuffle() # must shuffle at beggining of every game 
         self.preFlop()
         clock = pygame.time.Clock()
         
         while True:
-            currentPlayer = self._players[self._currentPlayerTurn]
+            currentPlayer = self._activePlayers[self._currentPlayerTurn]
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     exit()
@@ -145,13 +146,15 @@ class GameController:
                     # if self._waitingForPlayer:
                     if event.button == 1: # if left click
                         if self._buttons.checkButtonClicked() == True: # loops over all buttons to see if one was clicked
-                            if self._clearActions == True:
-                                self.resetAIActionNames()
-                            self.processAction(self._buttons.getActionName(), currentPlayer)
-                            self._currentPlayerTurn += 1 # must change -> flag system!
-                            if self.roundEnded():
-                                self._currentPlayerTurn = 0
-                                self._roundCycleFinished = True
+                            namedAction = self._buttons.getActionName()
+                            if self.validAction(namedAction):
+                                if self._clearActions == True:
+                                    self.resetAIActionNames()
+                                self.processAction(namedAction, currentPlayer)
+                                self._currentPlayerTurn += 1
+                                if self.roundEnded():
+                                    self._currentPlayerTurn = 0
+                                    self._roundCycleFinished = True
                             # self._waitingForPlayer = False
                         # ending wrong, it should just check if its 2 then set to 0 insta, not end round
 
@@ -205,14 +208,29 @@ class GameController:
         return False
     
     def getNextPlayerTurn(self):
-        if self._currentPlayerTurn >= len(self._players):
-            return self._players[0]
-        return self._players[self._currentPlayerTurn]
-
+        if self._currentPlayerTurn >= len(self._activePlayers):
+            return self._activePlayers[0]
+        return self._activePlayers[self._currentPlayerTurn]
+    
+    def validAction(self, actionName, amount=100): # temp value for prot 3 to implement
+        if actionName in self._availableActions:
+            if actionName in self._moneyLimits.keys():
+                if amount < self._moneyLimits[actionName]:
+                    return False
+            return True
+        return False
+            
     def processAction(self, action, player):
+        if action != "check" and "check" in self._availableActions:
+            self._availableActions.remove("check")
+
         if action == "raise":
             self._raiseHappened = True
             self._raiser = player
+
+        elif action == "fold":
+            self._activePlayers.remove(player)
+            self._currentPlayerTurn -= 1
 
     def setWaitingForPlayer(self, currentPlayer):
         print("YE!")
@@ -233,9 +251,10 @@ class GameController:
     def preFlop(self):
             # deals each player their hand -> then gives the cards their coordinates on the screen
             self._dealer.dealPlayerHands(self._players)
-            for player in self._players:
+            for player in self._activePlayers:
                 if player._isHuman == True: # human player will have their cards visible 
                     for index, card in enumerate(player._hand):
+                        print(player._isHuman, [card.getName() for card in player._hand])
                         # this loop gets the index of the card in the player hand#
                         # then at that same index in the handCardX list, that x-coordinate is given
                         card.setPos(handCardX[index], handCardY)
@@ -276,8 +295,8 @@ class GameController:
         for index, card in enumerate(self._communityCards):
             card.setPos(communityCardX[index], communityCardY)
 
-        self._players[0]._hand = [Card("9", "hearts"), Card("3", "diamonds")]
-        for index, card in enumerate(self._players[0]._hand):
+        self._activePlayers[0]._hand = [Card("9", "hearts"), Card("3", "diamonds")]
+        for index, card in enumerate(self._activePlayers[0]._hand):
                     card.setPos(handCardX[index], handCardY)
         """
         # self.evaluatePlayerHands() now done in the post river
@@ -296,21 +315,23 @@ class GameController:
         
     # current player turn gets to len(players) + 1
     def roundEnded(self):
-        if self._currentPlayerTurn > len(self._players) - 1:
+        if self._currentPlayerTurn > len(self._activePlayers) - 1:
             self._clearActions = True
             return True
     
     def computerAction(self):
-        if self._currentPlayerTurn >= len(self._players):
+        if self._currentPlayerTurn >= len(self._activePlayers):
             return False
         
-        currentPlayer = self._players[self._currentPlayerTurn]
+        currentPlayer = self._activePlayers[self._currentPlayerTurn]
 
         if currentPlayer._isHuman == True: # do not do an AI's turn if waiting for player to press button and do their turn
             return False # return None for now -> change to something better later?
         
         self._currentPlayerTurn += 1
-        currentPlayer.monteCarloSimulation(10000, self._communityCards)
+        # self, simulations, communityCards, canCheck, toCall, raiseMin
+        canCheck = "check" in self._availableActions
+        currentPlayer.monteCarloSimulation(12000, self._communityCards, canCheck, self._moneyLimits["call"], self._moneyLimits["raise"])
         currentPlayer.doAction()
 
         return True
@@ -319,15 +340,17 @@ class GameController:
         self._currentPlayerTurn = 0 # starting player will be at the 0th index
         self._gameTurn += 1 # goes to the next game turn e.g self.flop -> self.turn
         self.gameTurnState[self._gameTurn]() # calls the function from the key-value pair
+        self._availableActions = ["call", "check", "fold", "raise"] # TODO: comment this and everything else :<
 
     def resetAIActionNames(self):
-        for player in self._players:
+        for player in self._activePlayers:
             if not player._isHuman:
                 player._actionName = ""
                 # print(player.getActionName()) USED FOR DEBUGGING
+        self._clearActions = False
 
     def drawCards(self):
-        for player in self._players:
+        for player in self._activePlayers:
             if player._isHuman == True: #or self.checkPostRiver() and not player._isHuman and self._roundCycleFinished and not self._raiseHappened:
                 for card in player._hand:
                     if card._x != None and card._y != None: # was trying to draw AI cards and error 
@@ -358,7 +381,7 @@ class GameController:
                 screen.blit(actionText, (AIPosX[posIndex][1], AIPosY[posIndex] + cardHeight))
 
     def revealAICards(self):
-        for player in self._players:
+        for player in self._activePlayers:
             if player._isHuman == False:
                 for card in player._hand:
                     if card._x != None and card._y != None: 
@@ -485,7 +508,7 @@ class GameController:
     # as once the value has been found we can guarantee that is the best hand for that player's hand
     # this needs to be performant since it will be used for the monte-carlo simulations
     def evaluatePlayerHands(self):
-        for player in self._players: # check each player
+        for player in self._activePlayers: # check each player
             mergedHandCommunity = self._communityCards[:] # use a shallow copy for safety this was bug remember later julius
             for card in player._hand:
                 mergedHandCommunity.append(card) # add the current player's cards to the merged list (reset on next player)
@@ -518,8 +541,8 @@ class GameController:
 
     def decideWinner(self): # added in prototype 2
         # playerToScore = {} possible solution?
-        winner = self._players[0] # default value
-        for player in self._players:
+        winner = self._activePlayers[0] # default value
+        for player in self._activePlayers:
             if self._handValue[player._evaluatedHand] > self._handValue[winner._evaluatedHand]:
                 winner = player # TODO: tied cases????
         return winner
@@ -533,8 +556,9 @@ class GameController:
         self._raiseHappened = False
         self._roundCycleFinished = False
         self._dealer.shuffle()
+        self._activePlayers += self._players
 
-        for player in self._players:
+        for player in self._players: # was a bug when using self._activePlayers not resetinng all the hands brotato
             player._hand = []  
             player._evaluatedHand = ""  
             player._isFolded = False  
@@ -644,7 +668,7 @@ class Player:
         self._isFolded = True
 
     def check(self): # skips player turn, if previous turn was check or nothing
-        # print("I CHECKED") # debugging
+        print("I CHECKED") # debugging
         pass
 
     def giveCard(self, card):
@@ -660,6 +684,8 @@ class Player:
         print("calling")
         pass
 
+    def allIn(self):
+        print("ALL IN BABY")
 
 class AIPlayer(Player):
     def __init__(self, name="monte"):
@@ -668,22 +694,29 @@ class AIPlayer(Player):
         self._isHuman = False
         self._action = self.check # temp action value
         self._actionName = ""
-        self._bluffConstant = 1 / random.randint(1, 100) # random float value betwwen 0.01 and 1
-        self._aggressiveness =  1 / random.randint(75, 80) 
-        self._confidence = 1 / random.randint(20, 75) # idk rn? 0.x as a average value??
+        self._bluffConstant = random.uniform(0.1, 0.4)
+        self._aggressiveness = random.uniform(0.1, 0.6)
+        self._confidence = random.uniform(0.2, 0.7)
+        self._previousActionName = None
         # self._tiltLevel = 0 # decide later ^^^
     
     def doAction(self):
+        self._previousActionName = self._actionName
         return self._action()
 
     def getActionName(self):
         return self._actionName
     
-    def monteCarloSimulation(self, simulations, communityCards):
+    def recalculateAttributes(self):
+        self._bluffConstant = random.uniform(0.1, 0.4)
+        self._aggressiveness = random.uniform(0.1, 0.6)
+        self._confidence = random.uniform(0.4, 0.6)
+    
+    def monteCarloSimulation(self, simulations, communityCards, canCheck, toCall, raiseMin):
         wins = 0 # counter for the wins
         gameEnv = GameController() # recreate the game env outside the game loop
         opponent = AIPlayer() # opponent to play against in the simulations
-        gameEnv._players = [self, opponent]
+        gameEnv._activePlayers = [self, opponent]
         startTime = time.time() # temporarily here for time benchmarking
 
         # create copy of the deck and remove what we know from copies
@@ -707,35 +740,80 @@ class AIPlayer(Player):
 
             gameEnv.evaluatePlayerHands() # each player's attribute of evaluatedHand gets changed accordingly
             if gameEnv.decideWinner() == self:
-                wins += 1
-
+                wins += 1   
         # print(f"after {simulations} simulations this AI won {wins} times")
         # print(time.time() - startTime)
-        self.attributeMath(wins, simulations)
+        self._bluffConstant = self._aggressiveness * (1 - wins)
+        self.attributeMath(wins, simulations, canCheck, toCall, raiseMin)
     
-    def attributeMath(self, wins, simulations):
-        winrate = wins / simulations
+    def attributeMath(self, wins, simulations, canCheck, toCall, raiseMin):
+        self.recalculateAttributes()
+        winrate = wins / simulations   
+        winrate *= 0.75 # normalise the winrate above 0.5 then good hand!
+        print(winrate)
+        # stronger hand 
         if winrate > self._confidence:
-            if self._aggressiveness > self._confidence:
-                # add an all in chance and how get the call value!
-                self._action = self.raisePot # temp value to raise by
+            if winrate >= self._confidence * 2.4:
+                self._action = self.raisePot  
                 self._actionName = "raise"
+                # MAKE THIS ACTUALLY ALL IN ^^^^^^^
+                return
+            
+            if self._previousActionName != "raise" and self._aggressiveness > 0.4:
+                self._action = self.raisePot
+                self._actionName = "raise"
+                return
+            
+            elif self._previousActionName == "raise" and self._aggressiveness > 0.59:
+                self._action = self.raisePot
+                self._actionName = "raise"
+                return
 
-            elif self._confidence - self._aggressiveness > 0.1:
+            if toCall > 0:
                 self._action = self.call
                 self._actionName = "call"
-            
-            else:
-                self._action = self.fold
-                self._actionName = "fold"
+                return
 
-        elif self._aggressiveness > self._bluffConstant:
-            if self._aggressiveness > self._confidence:
-                self._action = self.raisePot # temp val
+            self._action = self.check
+            self._actionName = "check"
+            return
 
-        else:
+        # either bluff, or fold
+        allInChance = self._bluffConstant * 0.35  # subset of bluffs become all-in
+        raiseChance = self._bluffConstant * 0.65
+
+        roll = random.uniform(0.01, self._aggressiveness)
+
+        if self._confidence < self._aggressiveness:
             self._action = self.fold
             self._actionName = "fold"
+            return
+
+        # BLUFF ALL IN 
+        if allInChance > roll:
+            print("im totally bluffing")
+            self._action = self.raisePot
+            self._actionName = "raise"
+            # MAKE THIS ACTUALLY ALL IN ^^^^^^^
+            return
+
+        # BLUFF RAISE
+        if roll > raiseChance:
+            print("im totally bluffing")
+            self._action = self.raisePot
+            self._actionName = "raise"
+            return
+
+        # BLUFF CHECK
+        if canCheck:
+            self._action = self.check
+            self._actionName = "check"
+            return
+
+        # OTHERWISE FOLD
+        self._action = self.fold
+        self._actionName = "fold"
+        return
 
         # print(f"conf {self._confidence}")
         # print(f"bluff {self._bluffConstant}")

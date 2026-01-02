@@ -147,8 +147,7 @@ class GameController:
         
         # flags for the game loop
         self._raiseHappened = False # flag for the logic of keeping the betting round going when a raise occurs
-        self._waitingForPlayer = True # True inital since at the very start of the game i will make the player be the first person to go.
-        self._roundCycleFinished = False # relates to when every person has made a bet/action, turns to True if everyone has gone and raiseHappend = False
+        self._roundCycleFinished = False # when every person has made a bet/action, True if everyone has gone and raiseHappend = False
         self._raiser = None # is a Player/AIPlayer Object
         self._clearActions = False # each AI player's turns must be reset to none since it shouldn't have round persistence.
 

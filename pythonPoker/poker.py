@@ -237,7 +237,6 @@ class GameController:
             clock.tick(60) # 60 fps
 
     def processRoundEnd(self):
-        self._playersChecked = []
         if self.checkPostRiver(): # gameTurn == 3 -> end
             self.postRiver() # and decide winner.
 
@@ -287,15 +286,23 @@ class GameController:
             # set flags for the raise round to occur instead of the non-raise round end.
             self._raiseHappened = True
             self._raiser = player
+            self.removeFromCheckList(player)
 
         elif action == "fold":
             self._activePlayers.remove(player)
             self._currentPlayerTurn -= 1 # MUST minus one from this since it is incremented by 1 on every valid turn, including fold.
             # but removing a player and then incrementing would skip the next player so to negate this we -1
+            self.removeFromCheckList(player)
         
+        elif action == "call":
+            self.removeFromCheckList(player)
+
         elif action == "check":
             self._playersChecked.append(player)
 
+    def removeFromCheckList(self, player):
+        if self._playersChecked and player in self._playersChecked:
+            self._playersChecked.remove(player)
 
     def waitForInput(self):
         # when the round has finished the player must click a button or their mouse to progess
@@ -383,6 +390,7 @@ class GameController:
         # TODO: need a win/loss screen, if they run outta money -> lose, if everyone else broke -> win! -> retry/exit screen
         self.waitForInput()
         self.reset()
+        pygame.display.update()
         self.preFlop()
 
     # end of game
@@ -682,18 +690,25 @@ class GameController:
         self._dealer.recreateDeck()
         self._communityCards = [] # no community cards
         self._currentPlayerTurn = 0 # TODO: This MUST change on the big, small blind and dealer button (proto 3)
+
         self._gameTurn = 0
         self._raiser = None
         self._raiseHappened = False
         self._roundCycleFinished = False
         self._dealer.shuffle() # shuffle the deck otherwise the cards given will the exact same as an unshuffled deck
-        self._activePlayers += self._players
+        self._activePlayers = self._players[:]
+        self._playersChecked = []
+        self._moneyLimits = {"call": 5, "raise": self._initalMinCall * 2} # raise value to be corrected in prototype 3.
+        self._availableActions = ["call", "check", "fold", "raise"] # used for validation of moves.
 
         for player in self._players: # was a bug when using self._activePlayers 
             # ALL player flags and attributes reset
             player._hand = []  
             player._evaluatedHand = ""  
             player._isFolded = False  
+            if not player._isHuman:
+                player._action = ""
+                player._actionName = ""
 
 
 class Dealer:

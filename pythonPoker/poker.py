@@ -1087,24 +1087,30 @@ class ButtonManager:
     def __init__(self, buttons):
         self._buttons = buttons # buttons is a dict(buttonName:buttonObject)
 
+    # check if any button on screen was clicked, returns True if so, False if not.
     def buttonWasClicked(self):
         for button in self._buttons.values(): # loops over dict() keys
             if button.wasClicked() == True:
                 return True
             
-        return False
+        return False # must always return something
 
     def executeNamedButton(self, buttonName):
+        # run a specific button from the button list
         self._buttons[buttonName].runAction()
 
+    # returns the name of button that was pressed
+    # it is used to process the action so i know what button human actually presses
     def getActionName(self):
         if self.buttonWasClicked() == True:
             for buttonName, button in self._buttons.items(): # loops over dict() k-v pairs
                 if button.wasClicked() == True:
                     return buttonName
+                
+        return False # must always return something
 
     def drawAllButtons(self, isHumanTurn):
-        if isHumanTurn == True:
+        if isHumanTurn == True: # only draw the buttons if its the humans turn for added turn clarity.
             for buttonName in self._buttons:
                 self._buttons[buttonName].drawButton() # accesses the the Button() object value in the dict
 

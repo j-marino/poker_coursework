@@ -11,9 +11,10 @@ turnIndicatorFont = pygame.font.SysFont("Consolas", 25)
 screenWidth, screenHeight = 1600, 900
 POKERGREEN = pygame.Color("#3c7257")
 WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-GREY = (210, 210, 210)
-RED = (255, 180, 180)
+BLACK = (0, 0, 0) # used for button text
+LIGHT_BLACK = (200, 200, 200) # action name.
+HOVER_GREY = (190, 190, 190) # hovering over the button colour
+RED = (255, 140, 140) # TURN INDICATOR
 
 actionButtonWidth, actionButtonHeight = 120, 40
 # calculate the button x coordinate so that they are mathematically equally spaced across the screen
@@ -181,19 +182,23 @@ class GameController:
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1: # if left click
                         # loops over all buttons to see if one was clicked
-                        if self._buttons.checkButtonClicked() == True: 
+                        if self._buttons.buttonWasClicked() == True: 
+
                             # e.g. namedAction = "raise", used for validation and general processing
                             namedAction = self._buttons.getActionName()
 
-                            # sanity check
-                            if self.validAction(namedAction):
+                            # sanity check 
+                            # also only execute button press if the current player is the human player.
+                            if self.validAction(namedAction) and currentPlayer._isHuman == True:
                                 if self._clearActions == True:
+                                    self._buttons.executeNamedButton(namedAction)
                                     self.resetAIActionNames()
 
                                 # flags are changed after this method call, e.g. raiseHappened
                                 # TODO: will to integrate changing bet limits next.
                                 self.processAction(namedAction, currentPlayer)
                                 self._currentPlayerTurn += 1 # since the action is guaranteed valid we can move the next player.
+                                # self._waitingForPlayer = False
 
                                 # round finished when the last player has in the original cycle has made their turn.
                                 # this does not necesarrily mean we start the next round, since a raise could have occured.
@@ -218,14 +223,14 @@ class GameController:
                     # TODO: must change bet limits based on a valid turn
                     # action is always valid at this point
                     self.processAction(currentPlayer._actionName, currentPlayer) 
-                    
+                        
                     if self.roundEnded():
                         self.resetRound()
 
             # draw order MUST be background then table 
             screen.fill(POKERGREEN) # background
             self.drawTable()
-            self._buttons.drawAllButtons()
+            self._buttons.drawAllButtons(currentPlayer._isHuman) # buttons are only drawn if it is the player's turn.
             self.drawCards() # method also draws the back of the cards
             self.drawAINames()
             self.drawActionNames() # TODO: show the value of bet next to action
@@ -477,7 +482,7 @@ class GameController:
             AIAction = self._players[posIndex].getActionName()
 
             if AIAction != "":
-                actionText = fontVerdana.render(AIAction, True, GREY) # render text in a different colour to their name
+                actionText = fontVerdana.render(AIAction, True, LIGHT_BLACK) # render text in a different colour to their name
                 screen.blit(actionText, (AIPosX[posIndex][1], AIPosY[posIndex] + cardHeight))
                 # drawn on bottom right of hand cards by using the 1st index, which is the right most card of the AI
 
@@ -1043,11 +1048,12 @@ class AIPlayer(Player):
             return    
 
 class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
-    def __init__(self, x, y, width, height, action, text, color):
+    def __init__(self, x, y, width, height, action, text, colour):
         super().__init__(x, y, width, height)
         self._action = action
         self._text = fontConsolas.render(text, True, BLACK)
-        self._color = color
+        self._colour = colour
+        self._hoverColour = HOVER_GREY
         self._active = True # TODO: decide what to do with this in prototype 3: for the all-in feature, separate button or inactive/active buttons.
 
     def renderButtonText(self):
@@ -1055,19 +1061,23 @@ class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
         screen.blit(self._text, textRect) 
 
     def drawButton(self):
-        pygame.draw.rect(screen, self._color, (self.x, self.y, self.width, self.height)) # draw rectangle of button first
+        # draw the button a darker shade to show that you are hovering over it.
+        if self.isHoveringOverButton():
+            # hover colour is a greyish colour
+            pygame.draw.rect(screen, self._hoverColour, (self.x, self.y, self.width, self.height)) # draw rectangle of button first
+        else:
+            pygame.draw.rect(screen, self._colour, (self.x, self.y, self.width, self.height)) # regular white colour
         self.renderButtonText() # then do the button text so that it shows ontop
     
+    def isHoveringOverButton(self):
+        return self.collidepoint(pygame.mouse.get_pos())
+
     def wasClicked(self):
         if self.collidepoint(pygame.mouse.get_pos()):
             # if the player clicks this button then hadouken! do the button's action
-            return True # signifies yes this button has been pressed
+            return True # signifies yes (True) this button has been pressed
         else:
-            return False # returns False if the button was not pressed
-        
-    def getActionName(self):
-        if self.checkButtonClicked():
-            return self.button._action
+            return False # signifies no (False) if the button was not pressed
     
     def runAction(self):
         return self._action()
@@ -1077,23 +1087,26 @@ class ButtonManager:
     def __init__(self, buttons):
         self._buttons = buttons # buttons is a dict(buttonName:buttonObject)
 
-    def checkButtonClicked(self):
-        clicked = False # starts false and remains unchanged if a button was not pressed
-        for buttonName, button in self._buttons.items(): # loops over dict() keys
-            if self._buttons[buttonName].wasClicked() == True:
-                button.runAction()
-                clicked = True
-        return clicked # this function is needed to check that a button has been pressed 
-    # so i can change the game state accorindgly
+    def buttonWasClicked(self):
+        for button in self._buttons.values(): # loops over dict() keys
+            if button.wasClicked() == True:
+                return True
+            
+        return False
+
+    def executeNamedButton(self, buttonName):
+        self._buttons[buttonName].runAction()
 
     def getActionName(self):
-        for buttonName in self._buttons: # loops over dict() keys
-            if self._buttons[buttonName].wasClicked() == True:
-                return buttonName
+        if self.buttonWasClicked() == True:
+            for buttonName, button in self._buttons.items(): # loops over dict() k-v pairs
+                if button.wasClicked() == True:
+                    return buttonName
 
-    def drawAllButtons(self):
-        for buttonName in self._buttons:
-            self._buttons[buttonName].drawButton() # accesses the the Button() object value in the dict
+    def drawAllButtons(self, isHumanTurn):
+        if isHumanTurn == True:
+            for buttonName in self._buttons:
+                self._buttons[buttonName].drawButton() # accesses the the Button() object value in the dict
 
 game = GameController()
 game.gameLoop()

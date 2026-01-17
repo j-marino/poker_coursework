@@ -100,6 +100,7 @@ AINames = {
 
 screen = pygame.display.set_mode((screenWidth, screenHeight))
 
+
 class GameController:
     def __init__(self):
         self._players = [] # list of Player() sublasses [AI/HUMAN] objects
@@ -842,6 +843,7 @@ class Player:
     def allIn(self):
         print("ALL IN BABY") # temp for AI, this is just a raise equal to your bank account though
 
+
 class AIPlayer(Player):
     def __init__(self, name="monte"): # default name but all AI's are given a name
         super().__init__()
@@ -1046,6 +1048,7 @@ class AIPlayer(Player):
             self._action = self.fold
             self._actionName = "fold"
             return    
+
 
 class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
     def __init__(self, x, y, width, height, action, text, colour):

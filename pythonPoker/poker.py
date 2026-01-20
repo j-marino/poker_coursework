@@ -7,6 +7,7 @@ pygame.font.init()
 fontConsolas = pygame.font.SysFont("Consolas", 35)
 fontVerdana = pygame.font.SysFont("Verdana", 32)
 turnIndicatorFont = pygame.font.SysFont("Consolas", 25)
+moneyFont = pygame.font.SysFont("Consolas", 25)
 
 screenWidth, screenHeight = 1600, 900
 POKERGREEN = pygame.Color("#3c7257")
@@ -16,7 +17,7 @@ LIGHT_BLACK = (200, 200, 200) # action name.
 HOVER_GREY = (190, 190, 190) # hovering over the button colour
 RED = (255, 140, 140) # TURN INDICATOR
 
-actionButtonWidth, actionButtonHeight = 120, 40
+actionButtonWidth, actionButtonHeight = 120, 38
 # calculate the button x coordinate so that they are mathematically equally spaced across the screen
 # since its going to be 4 buttons displayed at a time the x coordinates are decided by multipying the screen width by 0.20 * n
 # half button width is subtracted since it is draw from the top left corner.
@@ -24,11 +25,11 @@ actionButtonWidth, actionButtonHeight = 120, 40
 actionButtonX = {
     "check": (int(screenWidth * 0.20)) - actionButtonWidth / 2, 
     "fold": (int(screenWidth * 0.40)) - actionButtonWidth / 2,
-    "raise": (int(screenWidth * 0.60)) - actionButtonWidth / 2,
-    "call": (int(screenWidth * 0.80)) - actionButtonWidth / 2
+    "call": (int(screenWidth * 0.60)) - actionButtonWidth / 2,
+    "raise": (int(screenWidth * 0.80)) - actionButtonWidth / 2
 }
 # each action button will share the same height of 80 from the bottom of the screen
-actionbuttonY = screenHeight - 80
+actionbuttonY = screenHeight - 50
 # ^ both X and Y coords are calculated from screenHeight so that it scales accordingly
 
 cardWidth = 125
@@ -38,7 +39,7 @@ tableHeight = 700 # original image height: 350
 # when scaling it must be somewhat close to the original 750x350 ratio.
 
 handCardXGap = 5 # horizontal pixel distance between 2 cards
-handCardYGap = 275 # refers to pixel distance from bottom of screen
+handCardYGap = 290 # refers to pixel distance from bottom of screen
 
 # hand cards (player cards) and positioned in the bottom middle of the screen.
 handCardX = [(screenWidth / 2 - cardWidth - handCardXGap), screenWidth / 2]
@@ -56,7 +57,7 @@ communityCardX = [startX + i * (cardWidth + communityCardXGap) for i in range(0,
 communityCardY = screenHeight - communityCardYGap # all community cards share this same coord.
 
 # the mathematical centre of the poker table is visually unpleasing, to fix a spacer is used.
-pokerTableYSpacer = 20 # controls the height of the poker table from the bottom of the screen
+pokerTableYSpacer = 40 # controls the height of the poker table from the bottom of the screen
 pokerTableX = (screenWidth - tableWidth) / 2
 pokerTableY = (screenHeight - tableHeight) / 2 - pokerTableYSpacer
 pokerTable = pygame.transform.scale(pygame.image.load("table/poker_table.png"), (tableWidth, tableHeight))
@@ -79,12 +80,13 @@ AIPosX = {
 
 # the Y positions must form an oval shape. to achieve this y positions are calculated with half the card width,
 # it works well for common screen sizes, tested at 1920x1080 and 2560x1440 monitors
+Y_SPACER = 15
 AIPosY = {
-    1: handCardY - cardHeight / 2,  # lower left (half card height above player)
-    2: screenHeight * 0.05 + cardHeight / 2,  # upper left (half card height below top)
-    3: screenHeight * 0.05,  # top center
-    4: screenHeight * 0.05 + cardHeight / 2,  # upper right (half card height below top)
-    5: handCardY - cardHeight / 2   # lower right (half card height above player)
+    1: handCardY - cardHeight / 2 - Y_SPACER,  # lower left (half card height above player)
+    2: screenHeight * 0.05 + cardHeight / 2 - Y_SPACER,  # upper left (half card height below top)
+    3: screenHeight * 0.05 - Y_SPACER,  # top center
+    4: screenHeight * 0.05 + cardHeight / 2 - Y_SPACER,  # upper right (half card height below top)
+    5: handCardY - cardHeight / 2 - Y_SPACER  # lower right (half card height above player)
 }
 
 # each position will have the AI name drawn beneath it
@@ -107,6 +109,7 @@ class GameController:
         self._activePlayers = [] # separates the players who have folded from those who have not
         self._communityCards = [] # list of Card objects
         self._dealer = Dealer() # deck created in Dealer class
+        self._banker = Banker()
         self._currentPlayerTurn = 0
         self._gameTurn = 0
 
@@ -124,6 +127,8 @@ class GameController:
             "call": Button(actionButtonX["call"], actionbuttonY, actionButtonWidth, actionButtonHeight, humanPlayer.call, "call", WHITE)
         }) # buttonManager takes the buttons as dictionary so it is easy to link to button
         # numbers not used since it would get confusing as which button i am refering to
+
+        self._raiseField = TextField(actionButtonX["raise"], actionbuttonY, actionButtonWidth, actionButtonHeight) # temp values except for the x and y
 
         # this stores the games function calls after the preFlop is done
         # its needed to cleanly go through the function calls without a if, else bird's nest mess
@@ -167,6 +172,8 @@ class GameController:
             AIPlayer(AINames[nameIndex]).addToGame(self._players) # AI's are given their according name and positions in the game
 
         self._activePlayers += self._players[:] # uses a copy for safety
+        self._banker.setFundedPlayers(self._activePlayers)
+        self._banker.giveAllStartingMoney(1000) # everyone starting with 1000 TODO: make constants later!!!!!!!!!!!!!!!!!!!
         self._dealer.shuffle() # must shuffle at beggining of every game 
 
         # TODO: preFlop will have to consider the dealer button position, big and small blinds value and rotation.
@@ -180,6 +187,12 @@ class GameController:
                 if event.type == pygame.QUIT:
                     exit()
 
+                raiseInput = self._raiseField.handleEvents(event)
+                if raiseInput != False: # raise from box.
+                    self._raiseField.resetInput()
+                    self.humanAction("raise", currentPlayer, int(raiseInput)) # TODO: HANDLING OF THIS BOMBOCLAT SHIT
+
+
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1: # if left click
                         # loops over all buttons to see if one was clicked
@@ -187,25 +200,18 @@ class GameController:
 
                             # e.g. namedAction = "raise", used for validation and general processing
                             namedAction = self._buttons.getActionName()
+                            buttonObject = self._buttons.getButtonObject(namedAction)
 
-                            # sanity check 
-                            # also only execute button press if the current player is the human player.
-                            if self.validAction(namedAction) and currentPlayer._isHuman == True:
-                                if self._clearActions == True:
-                                    self._buttons.executeNamedButton(namedAction)
-                                    self.resetAIActionNames()
+                            if namedAction == "raise" and buttonObject._active == True:
+                                buttonObject._active = False
+                                self._raiseField._active = True
+                                
+                            else:
+                                self.humanAction(namedAction, currentPlayer, self._banker._minRaise)
 
-                                # flags are changed after this method call, e.g. raiseHappened
-                                # TODO: will to integrate changing bet limits next.
-                                self.processAction(namedAction, currentPlayer)
-                                self._currentPlayerTurn += 1 # since the action is guaranteed valid we can move the next player.
-                                # self._waitingForPlayer = False
-
-                                # round finished when the last player has in the original cycle has made their turn.
-                                # this does not necesarrily mean we start the next round, since a raise could have occured.
-                                if self.roundEnded():
-                                    self.resetRound()
-
+                    raiseButton = self._buttons.getButtonObject("raise")
+                    raiseButton._active = True
+                        
             # round end if raise
             if self._raiseHappened:
                 if self.raiseCycleFinished(): # checks if we are back to the raiser's turn.
@@ -228,6 +234,7 @@ class GameController:
                     if self.roundEnded():
                         self.resetRound()
 
+
             # draw order MUST be background then table 
             screen.fill(POKERGREEN) # background
             self.drawTable()
@@ -236,6 +243,9 @@ class GameController:
             self.drawAINames()
             self.drawActionNames() # TODO: show the value of bet next to action
             self.drawTurnIndicator(currentPlayer)
+            self.drawPotMoney()
+            self.drawPlayerMoney()
+            self.drawRaiseField()
             # e.g. -> raise (50). call (10), all-in (200)
 
             pygame.display.update()
@@ -301,6 +311,7 @@ class GameController:
         
         elif action == "call":
             self.removeFromCheckList(player)
+            self._banker.handleCall(player)
 
         elif action == "check":
             self._playersChecked.append(player)
@@ -428,6 +439,23 @@ class GameController:
 
         return True
 
+    def humanAction(self, namedAction, currentPlayer, raiseAmount):
+        if self.validAction(namedAction) and currentPlayer._isHuman == True:
+            if self._clearActions == True:
+                self._buttons.executeNamedButton(namedAction) # NOTE: GET RID OF THIS SHIT ASAP ROCKY SOON
+                self.resetAIActionNames()
+
+            # flags are changed after this method call, e.g. raiseHappened
+            # TODO: will to integrate changing bet limits next.
+            self.processAction(namedAction, currentPlayer)
+            self._currentPlayerTurn += 1 # since the action is guaranteed valid we can move the next player.
+            # self._waitingForPlayer = False
+
+            # round finished when the last player has in the original cycle has made their turn.
+            # this does not necesarrily mean we start the next round, since a raise could have occured.
+            if self.roundEnded():
+                self.resetRound()
+
     def startNextRound(self):
         self._currentPlayerTurn = 0 # starting player will be at the 0th index
         self._gameTurn += 1 # goes to the next game turn e.g self.flop -> self.turn
@@ -442,6 +470,10 @@ class GameController:
 
         self._clearActions = False # reset flag since action is now complete
 
+    def drawRaiseField(self):
+        if self._raiseField._active == True:
+            self._raiseField.drawTextInput()
+        
     def drawCards(self):
         for player in self._activePlayers: # activePlayers instead of players since it shows someone folds when their cards are not drawn
             if player._isHuman == True: 
@@ -474,6 +506,27 @@ class GameController:
             screen.blit(nameText, (AIPosX[posIndex][0], AIPosY[posIndex] + cardHeight))
             # drawn on bottom left by using the 0th index, which is the left most card of the AI
             # adding cardHeight so that their name is drawn underneath the cards
+
+    def drawPotMoney(self):
+        potText = "pot £" + str(self._banker._pot)
+        potText = moneyFont.render(potText, True, WHITE)
+        textRect =  potText.get_rect()
+        screen.blit(potText, (communityCardX[2] + (abs(textRect.width - cardWidth) / 2), communityCardY - textRect.height))
+    
+    def drawPlayerMoney(self):
+        for i, player in enumerate(self._players):
+            bankText = "£" + str(player._bank)
+            bankText = moneyFont.render(bankText, True, WHITE)
+            textRect = bankText.get_rect()
+
+            if player._isHuman == True:
+                bankTextX = handCardX[0]
+                bankTextY = handCardY + cardWidth + textRect.height * 2.5 # move to right when adding plyr name.
+            else:
+                bankTextX = AIPosX[i][0]
+                bankTextY = AIPosY[i] + cardWidth + textRect.height * 4 # aajajajaaj ??? bobb
+                
+            screen.blit(bankText, (bankTextX, bankTextY))
 
     # draws "raise", "call", "fold" or "check" next to the AI's name
     # TODO: implement quantity of money next to action name (prototype 3)
@@ -759,6 +812,48 @@ class Dealer:
         self._deck = Deck().createDeck()
         
 
+class Banker:
+    def __init__(self):
+        self._fundedPlayers = []
+        self._pot = 0
+        self._previousBet = 10 # determined on blinds later.
+        self._currentBet = 10 # will change!!!
+        self._minRaise = (self._currentBet - self._previousBet) + self._currentBet
+        self._callValue = 10
+        self._currentRoundBets = {} # player-bet dict for collecting the debts of those who need to pay after a raise to continue.
+        self._playerDebts = {} # debt needed to be paid if someone raises by the other players.
+    
+    def setFundedPlayers(self, playerList):
+        self._fundedPlayers = playerList
+    
+    def giveAllStartingMoney(self, initalBank):
+        for player in self._fundedPlayers:
+            player._bank = initalBank
+    
+    def handleCall(self, player):
+        self._previousBet = self._currentBet
+        player._bank -= self._previousBet
+        self._pot += self._previousBet
+        self._currentBet = self._callValue
+    
+    def setMinRaise(self):
+        self._minRaise = (self._currentBet - self._previousBet) + self._currentBet
+
+    def handleRaise(self, player, raiseAmount):
+        # add checking for enough money in bank
+        if raiseAmount > self._minRaise:
+            self._pot += raiseAmount
+            self._currentBet += raiseAmount
+            player._bank -= raiseAmount
+            self.setMinRaise()
+            self._callValue = self._currentBet
+    
+    def calculatePlayerDebts(self):
+        pass
+        
+
+
+
 class Card:
     def __init__(self, value, suit, loadImage=True):
         self._value = value
@@ -818,6 +913,7 @@ class Player:
         self._isFolded = False # flag to remove a player from the activePlayers of a game
         self._isHuman = True
         # TODO: prototype 3: AI AND HUMAN need a bank account
+        self._bank = 0
 
     def fold(self):
         self._isFolded = True
@@ -1064,26 +1160,75 @@ class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
         screen.blit(self._text, textRect) 
 
     def drawButton(self):
-        # draw the button a darker shade to show that you are hovering over it.
-        if self.isHoveringOverButton():
-            # hover colour is a greyish colour
-            pygame.draw.rect(screen, self._hoverColour, (self.x, self.y, self.width, self.height)) # draw rectangle of button first
-        else:
-            pygame.draw.rect(screen, self._colour, (self.x, self.y, self.width, self.height)) # regular white colour
-        self.renderButtonText() # then do the button text so that it shows ontop
+        if self._active == True:
+            # draw the button a darker shade to show that you are hovering over it.
+            if self.isHoveringOverButton():
+                # hover colour is a greyish colour
+                pygame.draw.rect(screen, self._hoverColour, self) # draw rectangle of button first
+
+            else:
+                pygame.draw.rect(screen, self._colour, self) # regular white colour
+
+            self.renderButtonText() # then do the button text so that it shows ontop
     
     def isHoveringOverButton(self):
         return self.collidepoint(pygame.mouse.get_pos())
 
     def wasClicked(self):
-        if self.collidepoint(pygame.mouse.get_pos()):
+        if self.collidepoint(pygame.mouse.get_pos()) and self._active == True:
             # if the player clicks this button then hadouken! do the button's action
             return True # signifies yes (True) this button has been pressed
+        
         else:
             return False # signifies no (False) if the button was not pressed
     
     def runAction(self):
         return self._action()
+
+
+class TextField(pygame.Rect):
+    def __init__(self, x, y, width, height, text=""):
+        super().__init__(x, y, width, height)
+        self._active = False
+        self._text = ""
+        self._colour = WHITE
+
+    def drawTextInput(self):
+        if self._active == True:
+            pygame.draw.rect(screen, self._colour, self)
+            screen.blit(moneyFont.render(self._text, True, BLACK), (self.x, self.y)) 
+
+    def handleEvents(self, event):
+        if event.type == pygame.QUIT:
+            pygame.quit()
+
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            
+            if self.collidepoint(pygame.mouse.get_pos()):
+                self._active = True
+            else:
+                self._active = False
+                self._text = ""
+
+        if event.type == pygame.KEYDOWN and self._active == True:
+
+            # delete
+            if event.key == pygame.K_BACKSPACE:
+
+                # remove the last one
+                self._text = self._text[:-1]
+
+            elif event.key == pygame.K_RETURN:
+                self._active = False
+                return self._text
+
+            else:
+                self._text += event.unicode
+
+        return False
+    
+    def resetInput(self):
+        self._text = ""
 
 
 class ButtonManager:
@@ -1116,6 +1261,12 @@ class ButtonManager:
         if isHumanTurn == True: # only draw the buttons if its the humans turn for added turn clarity.
             for buttonName in self._buttons:
                 self._buttons[buttonName].drawButton() # accesses the the Button() object value in the dict
+
+    def getButtonObject(self, name):
+        for buttonName in self._buttons.keys(): # loops over dict() keys
+            if buttonName == name:
+                return self._buttons[buttonName]
+            
 
 game = GameController()
 game.gameLoop()

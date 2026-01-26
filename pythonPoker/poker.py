@@ -174,8 +174,9 @@ class GameController:
         self._activePlayers += self._players[:] # uses a copy for safety
         self._banker.setFundedPlayers(self._activePlayers)
         self._banker.giveAllStartingMoney(1000) # everyone starting with 1000 TODO: make constants later!!!!!!!!!!!!!!!!!!!
+        self._banker.activePlayerToDebtList(self._activePlayers)
         self._dealer.shuffle() # must shuffle at beggining of every game 
-
+    
         # TODO: preFlop will have to consider the dealer button position, big and small blinds value and rotation.
         self.preFlop() # deals everyone 2 cards and starts the game.
         clock = pygame.time.Clock()
@@ -187,10 +188,10 @@ class GameController:
                 if event.type == pygame.QUIT:
                     exit()
 
-                raiseInput = self._raiseField.handleEvents(event)
-                if raiseInput != False: # raise from box.
+                raiseInput = int(self._raiseField.handleEvents(event))
+                if raiseInput != False and raiseInput >= self._banker._minRaise: # raise from box.
                     self._raiseField.resetInput()
-                    self.humanAction("raise", currentPlayer, int(raiseInput)) # TODO: HANDLING OF THIS BOMBOCLAT SHIT
+                    self.humanAction("raise", currentPlayer, raiseInput) # TODO: HANDLING OF THIS BOMBOCLAT SHIT
 
 
                 if event.type == pygame.MOUSEBUTTONDOWN:
@@ -208,6 +209,7 @@ class GameController:
                                 
                             else:
                                 self.humanAction(namedAction, currentPlayer, self._banker._minRaise)
+                                self.handlePrematureWin()
 
                     raiseButton = self._buttons.getButtonObject("raise")
                     raiseButton._active = True
@@ -229,7 +231,8 @@ class GameController:
                 if self.computerAction(): # returns true on sucessessful action decision and execution, false if not.
                     # TODO: must change bet limits based on a valid turn
                     # action is always valid at this point
-                    self.processAction(currentPlayer._actionName, currentPlayer) 
+                    self.processAction(currentPlayer._actionName, currentPlayer, currentPlayer._raiseAmount) 
+                    self.handlePrematureWin()
                         
                     if self.roundEnded():
                         self.resetRound()
@@ -261,10 +264,13 @@ class GameController:
             # reset flags.
             self._roundCycleFinished = False
             self._raiseHappened = False
+            self._banker.activePlayerToDebtList(self._activePlayers) # set to 0
     
     def resetRound(self):
         self._currentPlayerTurn = 0 # back to start of active player list.
         self._roundCycleFinished = True # changes flag to show that we can move onto the next gameTurn if no raise happened.
+        self._banker.resetCurrentRoundBets()
+        # self._banker.activePlayerToDebtList(self._activePlayers) # set to 0
 
     def raiseCycleFinished(self):
         # in poker the next turn starts when we are back to the most recent raiser's turn
@@ -292,7 +298,7 @@ class GameController:
         
         return False
             
-    def processAction(self, action, player):
+    def processAction(self, action, player, raiseAmount):
         # if you didnt check then remove check from being an option this gameTurn round.
         if action != "check" and "check" in self._availableActions: # presence check otherwise it can error
             self._availableActions.remove("check")
@@ -302,12 +308,14 @@ class GameController:
             self._raiseHappened = True
             self._raiser = player
             self.removeFromCheckList(player)
+            self._banker.handleRaise(player, raiseAmount)
 
         elif action == "fold":
             self._activePlayers.remove(player)
             self._currentPlayerTurn -= 1 # MUST minus one from this since it is incremented by 1 on every valid turn, including fold.
             # but removing a player and then incrementing would skip the next player so to negate this we -1
             self.removeFromCheckList(player)
+            self._banker.removeFromDebts(player)
         
         elif action == "call":
             self.removeFromCheckList(player)
@@ -397,6 +405,7 @@ class GameController:
     def postRiver(self):
         self.evaluatePlayerHands() # set each player's attributes of self._evaluatedHand to a string
         print(self.decideWinner()) # currently prints AI object
+        self._banker.givePotToWinner(self.decideWinner())
         # will change to names once main screen done (protoype 3), so the user can input their username
 
         self.revealAICards() # stop drawing red card back
@@ -433,10 +442,11 @@ class GameController:
 
         # monteMethod(simulations, communityCards, canCheck, toCall, raiseMin)
         # num of simulations -> 11000, decided so it doesnt take too long and does enough to be adequate 
-        currentPlayer.monteCarloSimulation(11000, self._communityCards, canCheck, self._moneyLimits["call"], self._moneyLimits["raise"])
+        currentPlayer.monteCarloSimulation(11000, self._communityCards, canCheck, self._banker._callValue, self._banker._minRaise)
         currentPlayer.doAction() # once it has the results of the simulations and set the action in its attributes then do the action!
         self._currentPlayerTurn += 1 # the player is valid so we can increment to the next player.
 
+        print(f"{currentPlayer._actionName}, raise amt:{currentPlayer._raiseAmount}")
         return True
 
     def humanAction(self, namedAction, currentPlayer, raiseAmount):
@@ -447,7 +457,7 @@ class GameController:
 
             # flags are changed after this method call, e.g. raiseHappened
             # TODO: will to integrate changing bet limits next.
-            self.processAction(namedAction, currentPlayer)
+            self.processAction(namedAction, currentPlayer, raiseAmount)
             self._currentPlayerTurn += 1 # since the action is guaranteed valid we can move the next player.
             # self._waitingForPlayer = False
 
@@ -741,6 +751,19 @@ class GameController:
         # TODO: add a case of n num of winners with the same hand, for this i will simplify it to splitting the pot instead of who has higher variation.
         # for: prototype 3
         return winner
+    
+    def handlePrematureWin(self):
+        # restructure this logic, used again in postriver
+        if len(self._activePlayers) == 1 and self._gameTurn < 3:
+            self._banker.givePotToWinner(self._activePlayers[0])
+            pygame.display.update()
+
+            # commence next game
+            # TODO: need a win/loss screen, if they run outta money -> lose, if everyone else broke -> win! -> retry/exit screen
+            self.waitForInput() # NOTE: may not need.
+            self.reset()
+            pygame.display.update()
+            self.preFlop()
 
     # all flags must be reset
     # deck must be shuffled and reset
@@ -758,6 +781,9 @@ class GameController:
         self._playersChecked = []
         self._moneyLimits = {"call": 5, "raise": self._initalMinCall * 2} # raise value to be corrected in prototype 3.
         self._availableActions = ["call", "check", "fold", "raise"] # used for validation of moves.
+        self._banker._callValue = 20
+        self._banker._previousBet, self._banker._currentBet = 10, 20
+        self._banker.activePlayerToDebtList(self._activePlayers)
 
         for player in self._players: # was a bug when using self._activePlayers 
             # ALL player flags and attributes reset
@@ -817,11 +843,13 @@ class Banker:
         self._fundedPlayers = []
         self._pot = 0
         self._previousBet = 10 # determined on blinds later.
-        self._currentBet = 10 # will change!!!
+        self._currentBet = 20 # will change!!!
         self._minRaise = (self._currentBet - self._previousBet) + self._currentBet
-        self._callValue = 10
+        self._callValue = 20
+        self._lastRaise = 0
         self._currentRoundBets = {} # player-bet dict for collecting the debts of those who need to pay after a raise to continue.
         self._playerDebts = {} # debt needed to be paid if someone raises by the other players.
+        self._allInPlayers = []
     
     def setFundedPlayers(self, playerList):
         self._fundedPlayers = playerList
@@ -831,28 +859,84 @@ class Banker:
             player._bank = initalBank
     
     def handleCall(self, player):
-        self._previousBet = self._currentBet
-        player._bank -= self._previousBet
-        self._pot += self._previousBet
-        self._currentBet = self._callValue
+        if self.playerHasDebt(player) == True:
+            print("BOBOBBO YOU PAYING DEBT NOW.")
+            debtToPay = self._playerDebts[player]
+            player._bank -= debtToPay
+            self._pot += debtToPay
+
+            self.addToCurrentRoundBets(player, debtToPay)
+            self.setAllIn(player, debtToPay)
+
+        else:
+            player._bank -= self._callValue
+            self._pot += self._callValue
+            self._playerDebts[player] -= self._callValue
+            print("minr", self._minRaise)
+            self.addToCurrentRoundBets(player, self._callValue)
+            self.setAllIn(player, self._callValue)
     
     def setMinRaise(self):
-        self._minRaise = (self._currentBet - self._previousBet) + self._currentBet
+        self._minRaise = self._currentBet + self._lastRaise 
 
     def handleRaise(self, player, raiseAmount):
         # add checking for enough money in bank
-        if raiseAmount > self._minRaise:
-            self._pot += raiseAmount
-            self._currentBet += raiseAmount
-            player._bank -= raiseAmount
-            self.setMinRaise()
-            self._callValue = self._currentBet
-    
-    def calculatePlayerDebts(self):
-        pass
+        # if raiseAmount > self._minRaise:
         
+        if self._currentBet:
+            self._currentBet = raiseAmount
+        else:
+            self._currentBet = self._callValue
 
+        self._previousBet = self._currentBet
+        # print("PREV", self._previousBet)
+        self._lastRaise = raiseAmount - self._previousBet
 
+        self._pot += raiseAmount
+        
+        player._bank -= raiseAmount
+        self.setMinRaise()
+        self._callValue = self._currentBet
+        print("minr", self._minRaise)
+        self._playerDebts[player] -= raiseAmount
+
+        self.addToCurrentRoundBets(player, raiseAmount)
+        self.calculatePlayerDebts(player, raiseAmount)
+        self.setAllIn(player, raiseAmount)
+
+    def addToCurrentRoundBets(self, player, bet):
+        self._currentRoundBets[player] = bet
+        # print(self._currentRoundBets)
+        
+    def resetCurrentRoundBets(self):
+        self._currentRoundBets = {}
+    
+    def activePlayerToDebtList(self, activePlayers):
+        for player in activePlayers:
+            self._playerDebts[player] = 0
+
+    def calculatePlayerDebts(self, raiser, moneyIn):
+        for player, bet in self._playerDebts.items():
+            if player != raiser:
+                self._playerDebts[player] += moneyIn
+        
+        print("DEBT", self._playerDebts)
+
+    def removeFromDebts(self, player):
+        del self._playerDebts[player]
+
+    def givePotToWinner(self, player):
+        player._bank += self._pot
+        self._pot = 0
+
+    def playerHasDebt(self, player):
+        print(self._playerDebts)
+        return self._playerDebts[player] > 0
+    
+    def setAllIn(self, player, bet):
+        if player._bank <= bet:
+            self._allInPlayers.append(player)
+            print(self._allInPlayers)        
 
 class Card:
     def __init__(self, value, suit, loadImage=True):
@@ -952,11 +1036,18 @@ class AIPlayer(Player):
         self._aggressiveness = random.uniform(0.2, 0.6) # affects -> raising (by how much in proto 3) or calling 
         self._confidence = random.uniform(0.2, 0.7) # threshold for when the AI will act without bluffing
         self._previousActionName = None
+        self._raiseAmount = 0
     
     def doAction(self):
         # store previous action name to bias future decisions (prevents stupid) -> reduces repetition
         self._previousActionName = self._actionName
+        if self._actionName == "raise":
+            return self._action(self._raiseAmount)
+        
         return self._action()
+    
+    def raisePot(self, amount):
+        self._raiseAmount = amount
 
     def getActionName(self):
         return self._actionName
@@ -1050,6 +1141,8 @@ class AIPlayer(Player):
             if handStrength == "very strong" and (self._aggressiveness + self._confidence) > winrate:
                 self._action = self.raisePot  
                 self._actionName = "raise" # will be a max raise
+                self._raiseAmount = self.raiseQuant(toCall, raiseMin)
+                print("RAISE", self._raiseAmount)
                 # TODO: prototype 3 implement all in 
                 return
             
@@ -1058,11 +1151,17 @@ class AIPlayer(Player):
                 if self._aggressiveness > 0.35: # more likely to raise on a "very strong" hand
                     self._action = self.raisePot
                     self._actionName = "raise"
+                    self._raiseAmount = self.raiseQuant(toCall, raiseMin)
+                    print("RAISE", self._raiseAmount)
+                    return
 
             elif handStrength == "strong":
                 if self._aggressiveness > 0.55: # less likely to raise on a "strong" hand
                     self._action = self.raisePot
                     self._actionName = "raise"
+                    self._raiseAmount = self.raiseQuant(toCall, raiseMin)
+                    print("RAISE", self._raiseAmount)
+                    return
             
             # if checking is not an option (since toCall will have a value IMPLEMENTED IN PROT 3) then call
             if toCall > 0:
@@ -1087,6 +1186,8 @@ class AIPlayer(Player):
             if self._aggressiveness > 0.50 and roll < 0.25:
                 self._action = self.raisePot
                 self._actionName = "raise"
+                self._raiseAmount = self.raiseQuant(toCall, raiseMin)
+                print("RAISE", self._raiseAmount)
                 return
             
             # if not aggressive then check confidence.
@@ -1143,7 +1244,15 @@ class AIPlayer(Player):
             # fold the trash weak hand then.
             self._action = self.fold
             self._actionName = "fold"
-            return    
+            return
+    
+    def raiseQuant(self, callValue, raiseMin):
+        roll = random.random() * 5
+        self._raiseAmount = callValue * (self._aggressiveness + self._confidence + roll)
+        if self._raiseAmount < raiseMin:
+            self._raiseAmount = raiseMin
+
+        return int(self._raiseAmount)
 
 
 class Button(pygame.Rect): # uses the pre-made Rect class from pygame library

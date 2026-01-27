@@ -163,8 +163,7 @@ class GameController:
 
         # NOTE: these attributes are for the foundations of prototype 3, they have been made just so the AI can make valid moves
         # values for initialMinCall is a temp value
-        self._initalMinCall = 5
-        self._moneyLimits = {"call": 5, "raise": self._initalMinCall * 2} # raise value to be corrected in prototype 3.
+        self._initalMinCall = 20
         self._availableActions = ["call", "check", "fold", "raise"] # used for validation of moves.
         self._allInPlayers = []
 
@@ -317,10 +316,6 @@ class GameController:
     def validAction(self, actionName, amount=100): # temp value for prot 3 to implement
         # used for the player only, the AI will always make a valid action
         if actionName in self._availableActions:
-            if actionName in self._moneyLimits.keys(): # raise or call -> blueprints for the features of protoype 3
-                if amount < self._moneyLimits[actionName]: # if you were too poor then your raise/call is invalid
-                    return False
-                
             return True # this is for "check" and is only allowed when you are either first or no one else has made a money bet.
         
         return False
@@ -870,7 +865,6 @@ class GameController:
         self._activePlayers = self._players[:]
         self._playersChecked = []
         self._allInPlayers = []
-        self._moneyLimits = {"call": 5, "raise": self._initalMinCall * 2} # raise value to be corrected in prototype 3.
         self._availableActions = ["call", "check", "fold", "raise"] # used for validation of moves.
         self._banker._callValue = 20
         self._banker._previousBet, self._banker._currentBet = 10, 20
@@ -954,18 +948,30 @@ class Banker:
     
     def handleCall(self, player):
         if self.playerHasDebt(player) == True:
-            print("BOBOBBO YOU PAYING DEBT NOW.")
+            
             debtToPay = self._raiseDebts[player]
-            player._bank -= debtToPay
-            self._pot += debtToPay
+            if self.betGreaterThanBank(player._bank, debtToPay):
+                debtPaid = player._bank
+            else:
+                debtPaid = debtToPay
+                
+            player._bank -= debtPaid
+            self._pot += debtPaid
             self.addToCurrentRoundBets(player, debtToPay)
+            self.addToBetTotal(player, debtToPay)
 
         else:
-            player._bank -= self._callValue
-            self._pot += self._callValue
-            self._raiseDebts[player] -= self._callValue
+            if player._bank < self._callValue:
+                moneyIn = player._bank
+            else:
+                moneyIn = self._callValue
+
+            player._bank -= moneyIn
+            self._pot += moneyIn
+            self._raiseDebts[player] -= moneyIn
             print("minr", self._minRaise)
-            self.addToCurrentRoundBets(player, self._callValue)
+            self.addToCurrentRoundBets(player, moneyIn)
+            self.addToBetTotal(player, moneyIn)
     
     def setMinRaise(self):
         self._minRaise = self._currentBet + self._lastRaise 
@@ -1032,11 +1038,19 @@ class Banker:
     def startCountingAllInDebt(self):
         self._startCountingAllInDebts = True
     
-    def calculateAllInDebts(self, allInPlayer, allInList, allInValue):
-        for player in allInList:
-            if player != allInPlayer:
-                pass
+    def addToBetTotal(self, player, bet):
+        if player in self._playerToTotalMoneyIn:
+            self._playerToTotalMoneyIn[player] += bet
+        else:
+            self._playerToTotalMoneyIn[player] = bet
+        
+        print(self._playerToTotalMoneyIn)
 
+    def distributeMoney(self, activePlayers, allInPlayers):
+        if allInPlayers:
+            activePlayers += allInPlayers # gotta check this
+        for player in activePlayers:
+            pass
 class Card:
     def __init__(self, value, suit, loadImage=True):
         self._value = value

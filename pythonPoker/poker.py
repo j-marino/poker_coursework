@@ -165,7 +165,7 @@ class GameController:
         # values for initialMinCall is a temp value
         self._initalMinCall = 20
         self._availableActions = ["call", "check", "fold", "raise"] # used for validation of moves.
-        self._allInPlayers = []
+        # self._allInPlayers = []
 
     def gameLoop(self):
         for nameIndex in AINames.keys():
@@ -185,7 +185,7 @@ class GameController:
         
         while True:
             currentPlayer = self._activePlayers[self._currentPlayerTurn] # this variable used for checks and validation this persons turn.
-
+        
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     exit()
@@ -195,7 +195,7 @@ class GameController:
                     if self._banker._minRaise <= raiseInput <= currentPlayer._bank:
                         self._raiseField.resetInput()
                         self.humanAction("raise", currentPlayer, raiseInput) # TODO: HANDLING OF THIS BOMBOCLAT SHIT
-
+                        currentPlayer = self._activePlayers[self._currentPlayerTurn]
 
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1: # if left click
@@ -216,7 +216,8 @@ class GameController:
 
                     raiseButton = self._buttons.getButtonObject("raise")
                     raiseButton._active = True
-                        
+            
+                
             # round end if raise
             if self._raiseHappened:
                 if self.raiseCycleFinished(): # checks if we are back to the raiser's turn.
@@ -231,19 +232,31 @@ class GameController:
 
             # process the currentPlayer if they are not the human user
             if not currentPlayer._isHuman:
-                if self.computerAction(): # returns true on sucessessful action decision and execution, false if not.
-                    # TODO: must change bet limits based on a valid turn
-                    # action is always valid at this point
-                    self.processAction(currentPlayer._actionName, currentPlayer, currentPlayer._raiseAmount)
-                    self.handlePrematureWin()
-                    
-
-                    if self.roundEnded():
-                        self.drawActionNames() # TODO: show the value of bet next to action
-                        self.drawActionValue()
-                        pygame.display.update()
-                        pygame.time.wait(1000)  # wait 0.5s
-                        self.resetRound()
+                if not self.currentPlayerIsAllIn(currentPlayer):
+                    if self.computerAction(): # returns true on sucessessful action decision and execution, false if not.
+                        # TODO: must change bet limits based on a valid turn
+                        # action is always valid at this point
+                        self.processAction(currentPlayer._actionName, currentPlayer, currentPlayer._raiseAmount)
+                        self.handlePrematureWin()
+                        if currentPlayer == len(self._activePlayers):
+                            currentPlayer = self._activePlayers[0]
+                        else:
+                            try:
+                                currentPlayer = self._activePlayers[self._currentPlayerTurn] 
+                            except IndexError:
+                                pass
+                            
+                        if self.roundEnded():
+                            self.drawActionNames() # TODO: show the value of bet next to action
+                            self.drawActionValue()
+                            pygame.display.update()
+                            pygame.time.wait(1000)  # wait 0.5s
+                            self.resetRound()
+                else:
+                    self.skipAllInPlayerTurn()
+            
+            if currentPlayer._isHuman and self.currentPlayerIsAllIn(currentPlayer):
+                self.skipAllInPlayerTurn()
 
             # draw order MUST be background then table 
             screen.fill(POKERGREEN) # background
@@ -313,7 +326,7 @@ class GameController:
         
         return self._activePlayers[self._currentPlayerTurn]
     
-    def validAction(self, actionName, amount=100): # temp value for prot 3 to implement
+    def validAction(self, actionName): # temp value for prot 3 to implement
         # used for the player only, the AI will always make a valid action
         if actionName in self._availableActions:
             return True # this is for "check" and is only allowed when you are either first or no one else has made a money bet.
@@ -332,8 +345,7 @@ class GameController:
             self.removeFromCheckList(player)
             self._banker.handleRaise(player, raiseAmount)
             if self.playerIsGoingAllIn(player, raiseAmount):
-                print("ALL IN!")
-                self.addPlayerToAllIn(player)
+                self.setPlayerAllIn(player)
                 if self.allPlayersAllIn():
                     self.showdown()
 
@@ -351,7 +363,7 @@ class GameController:
             self.removeFromCheckList(player)
             self._banker.handleCall(player)
             if self.playerIsGoingAllIn(player, self._banker._callValue):
-                self.addPlayerToAllIn(player)
+                self.setPlayerAllIn(player)
                 if self.allPlayersAllIn():
                     self.showdown()
 
@@ -360,18 +372,31 @@ class GameController:
 
     def playerIsGoingAllIn(self, player, bet):
         return self._banker.betGreaterThanBank(player._bank, bet) 
-
-    def addPlayerToAllIn(self, player):
-        self._activePlayers.remove(player)
-        self._allInPlayers.append(player)
-        self._currentPlayerTurn -= 1
+    
+    def setPlayerAllIn(self, player):
+        player._isAllIn = True
+    
+    def skipAllInPlayerTurn(self):
+        self._currentPlayerTurn += 1
+    
+    def currentPlayerIsAllIn(self, currentPlayer):
+        return currentPlayer._isAllIn
     
     def allPlayersAllIn(self):
-        return len(self._activePlayers) == 0
-    
+        allIn = True
+        count = 0
+        for player in self._activePlayers:
+            if player._isAllIn == False:
+                count += 1
+                if count > 1:
+                    return False
+            
+        return allIn
+
     def showdown(self):
         # print("HEEEEEEEEEEEEEEERE")
-        self._activePlayers = self._allInPlayers
+        # self._activePlayers = self._allInPlayers
+        print("SHOOOOOWDOWN!")
         while self.checkPostRiver() == False:
             self.processRoundEnd()
             self.drawCards()
@@ -556,7 +581,7 @@ class GameController:
 
                         # PLAYER MUST NOT BE ABLE TO SEE THE AI CARDS UNTIL END OF GAME
                         card.drawCardBack() # draw to screen not from hand
-            
+        """    
         if self._activePlayers and self._allInPlayers:
             for player in self._allInPlayers: # activePlayers instead of players since it shows someone folds when their cards are not drawn
                 if player._isHuman == True: 
@@ -570,7 +595,7 @@ class GameController:
 
                             # PLAYER MUST NOT BE ABLE TO SEE THE AI CARDS UNTIL END OF GAME
                             card.drawCardBack() # draw to screen not from hand
-
+        """
         # draw community cards (middle cards)
         for card in self._communityCards:
             if card._x != None and card._y != None:
@@ -838,7 +863,7 @@ class GameController:
     
     def handlePrematureWin(self):
         # restructure this logic, used again in postriver
-        if len(self._activePlayers) == 1 and self._gameTurn < 3 and len(self._allInPlayers) == 0:
+        if len(self._activePlayers) == 1 and self._gameTurn < 3: # and len(self._allInPlayers) == 0:
             self._banker.givePotToWinner(self._activePlayers[0])
             self.drawWinnerText(self._activePlayers[0])
             pygame.display.update()
@@ -864,11 +889,14 @@ class GameController:
         self._dealer.shuffle() # shuffle the deck otherwise the cards given will the exact same as an unshuffled deck
         self._activePlayers = self._players[:]
         self._playersChecked = []
-        self._allInPlayers = []
+        # self._allInPlayers = []
         self._availableActions = ["call", "check", "fold", "raise"] # used for validation of moves.
         self._banker._callValue = 20
         self._banker._previousBet, self._banker._currentBet = 10, 20
         self._banker.activePlayerToDebtList(self._activePlayers)
+        
+        for player in self._players:
+            player._isAllIn = False
 
         for player in self._players: # was a bug when using self._activePlayers 
             # ALL player flags and attributes reset
@@ -937,7 +965,6 @@ class Banker:
         self._allInDebts = {}
         self._playerToTotalMoneyIn = {}
         self._biggestAllIn = 0
-        self._startCountingAllInDebts = False
     
     def setFundedPlayers(self, playerList):
         self._fundedPlayers = playerList
@@ -1031,7 +1058,7 @@ class Banker:
     
     def betGreaterThanBank(self, playerBank, bet):
         return bet > playerBank
-    
+
     def isBiggestAllIn(self, allInValue):
         return allInValue > self._biggestAllIn
     
@@ -1051,6 +1078,8 @@ class Banker:
             activePlayers += allInPlayers # gotta check this
         for player in activePlayers:
             pass
+
+
 class Card:
     def __init__(self, value, suit, loadImage=True):
         self._value = value
@@ -1108,8 +1137,8 @@ class Player:
         self._hand = []
         self._evaluatedHand = ""
         self._isFolded = False # flag to remove a player from the activePlayers of a game
+        self._isAllIn = False
         self._isHuman = True
-        # TODO: prototype 3: AI AND HUMAN need a bank account
         self._bank = 0
 
     def fold(self):

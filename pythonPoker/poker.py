@@ -229,6 +229,8 @@ class GameController:
                 # must not end round if only some people checked
                 if not self._playersChecked or len(self._playersChecked) == len(self._activePlayers):
                     self.processRoundEnd()
+                elif self.getNumNonAllInPlayers() == len(self._playersChecked):
+                    self.processRoundEnd()
 
             # process the currentPlayer if they are not the human user
             if not currentPlayer._isHuman:
@@ -261,7 +263,7 @@ class GameController:
             # draw order MUST be background then table 
             screen.fill(POKERGREEN) # background
             self.drawTable()
-            self._buttons.drawAllButtons(currentPlayer._isHuman) # buttons are only drawn if it is the player's turn.
+            self._buttons.drawAllButtons(currentPlayer._isHuman and not currentPlayer._isAllIn) # buttons are only drawn if it is the player's turn.
             self.drawCards() # method also draws the back of the cards
             self.drawAINames()
             self.drawActionNames() # TODO: show the value of bet next to action
@@ -353,6 +355,12 @@ class GameController:
             self._activePlayers.remove(player)
             self._currentPlayerTurn -= 1 # MUST minus one from this since it is incremented by 1 on every valid turn, including fold.
             # but removing a player and then incrementing would skip the next player so to negate this we -1
+
+            if self._raiser == player:
+                try:
+                    self._raiser = self._activePlayers[self._currentPlayerTurn + 1]
+                except IndexError:
+                    self._raiser = self._activePlayers[0] 
             
             self._banker.removeFromDebts(player)
             if self.allPlayersAllIn():
@@ -369,6 +377,23 @@ class GameController:
 
         elif action == "check":
             self._playersChecked.append(player)
+            if len(self._playersChecked) == self.getNumNonAllInPlayers() and self.hasAllInPlayers():
+                self._roundCycleFinished = True
+
+    def hasAllInPlayers(self):
+        """Helper method to check if any players are all-in"""
+        for player in self._activePlayers:
+            if player._isAllIn:
+                return True
+        return False
+
+    def getNumNonAllInPlayers(self):
+        """Helper method to count non-all-in players"""
+        count = 0
+        for player in self._activePlayers:
+            if not player._isAllIn:
+                count += 1
+        return count
 
     def playerIsGoingAllIn(self, player, bet):
         return self._banker.betGreaterThanBank(player._bank, bet) 
@@ -397,6 +422,8 @@ class GameController:
         # print("HEEEEEEEEEEEEEEERE")
         # self._activePlayers = self._allInPlayers
         print("SHOOOOOWDOWN!")
+
+        self.revealAICards()
         while self.checkPostRiver() == False:
             self.processRoundEnd()
             self.drawCards()

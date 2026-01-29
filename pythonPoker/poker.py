@@ -513,13 +513,17 @@ class GameController:
     
     def postRiver(self):
         self.evaluatePlayerHands() # set each player's attributes of self._evaluatedHand to a string
-        print(self.decideWinner()) # currently prints AI object
-        self._banker.givePotToWinner(self.decideWinner())
+        # print(self.decideWinner()) # currently prints AI object
+        winner = self.decideWinner()
+
+        self._banker.distributeMoney(self._activePlayers, winner)
+        self._banker.givePotToWinner(winner)
+        
         # will change to names once main screen done (protoype 3), so the user can input their username
 
         print("POSTINF!!!")
         self.revealAICards() # stop drawing red card back
-        self.drawWinnerText(self.decideWinner())
+        self.drawWinnerText(winner)
         pygame.display.update()
 
         # commence next game
@@ -533,7 +537,7 @@ class GameController:
     def checkPostRiver(self):
         return self._gameTurn == 3
         
-    def roundEnded(self):
+    def roundEnded(self):   
         if self._currentPlayerTurn > len(self._activePlayers) - 1:
             self._clearActions = True # flag for resetting AI's actions
             return True
@@ -989,7 +993,6 @@ class Banker:
         self._lastRaise = 0
         self._currentRoundBets = {} # player-bet dict for collecting the debts of those who need to pay after a raise to continue.
         self._raiseDebts = {} # debt needed to be paid if someone raises by the other players.
-        self._allInDebts = {}
         self._playerToTotalMoneyIn = {}
         self._biggestAllIn = 0
     
@@ -1052,6 +1055,7 @@ class Banker:
         self._raiseDebts[player] -= raiseAmount
 
         self.addToCurrentRoundBets(player, raiseAmount)
+        self.addToBetTotal(player, raiseAmount)
         self.calculatePlayerDebts(player, raiseAmount)
 
     def addToCurrentRoundBets(self, player, bet):
@@ -1089,9 +1093,6 @@ class Banker:
     def isBiggestAllIn(self, allInValue):
         return allInValue > self._biggestAllIn
     
-    def startCountingAllInDebt(self):
-        self._startCountingAllInDebts = True
-    
     def addToBetTotal(self, player, bet):
         if player in self._playerToTotalMoneyIn:
             self._playerToTotalMoneyIn[player] += bet
@@ -1100,12 +1101,27 @@ class Banker:
         
         print(self._playerToTotalMoneyIn)
 
-    def distributeMoney(self, activePlayers, allInPlayers):
-        if allInPlayers:
-            activePlayers += allInPlayers # gotta check this
-        for player in activePlayers:
-            pass
+    def moneyReturnsDict(self, activePlayers, winner):
+        winnerMoneyIn = self._playerToTotalMoneyIn[winner]
+        moneyReturns = {}
 
+        for player in activePlayers:
+            # print(self._playerToTotalMoneyIn)
+            if player != winner:
+                moneyReturned = self._playerToTotalMoneyIn[player] - winnerMoneyIn 
+                if moneyReturned < 0:
+                    moneyReturned = 0
+
+                moneyReturns[player] = moneyReturned
+        
+        return moneyReturns
+
+    def distributeMoney(self, activePlayers, winner):
+        moneyReturns = self.moneyReturnsDict(activePlayers, winner)
+        if winner._isAllIn == True:
+            for player, moneyBack in moneyReturns.items():
+                player._bank += moneyBack
+                self._pot -= moneyBack
 
 class Card:
     def __init__(self, value, suit, loadImage=True):

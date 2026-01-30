@@ -166,10 +166,13 @@ class GameController:
         # NOTE: these attributes are for the foundations of prototype 3, they have been made just so the AI can make valid moves
         # values for initialMinCall is a temp value
         self._initalMinCall = 20
-        self._availableActions = ["call", "check", "fold", "raise"] # used for validation of moves.
+        self._availableActions = ["call", "fold", "raise"] # used for validation of moves.
         self._showdownRunning = False
         self._isEarlyWin = False
         self._lastPlayer = None
+        self._smallBlind = None
+        self._bigBlind = None
+        self._firstRoundBetter = None
 
     def gameLoop(self):
         for nameIndex in AINames.keys():
@@ -182,6 +185,12 @@ class GameController:
         self._dealer.shuffle() # must shuffle at beggining of every game 
     
         # TODO: preFlop will have to consider the dealer button position, big and small blinds value and rotation.
+        self._dealer.setDealerButton(self._activePlayers)
+        self.setBlinds()
+        # self.decideFirstRoundBetter()
+        # self._banker.takeBlindMoney(self._smallBlind, self._smallBlind, self._bigBlind)
+        # self._banker.takeBlindMoney(self._bigBlind, self._smallBlind, self._bigBlind)
+
         self.preFlop() # deals everyone 2 cards and starts the game.
         clock = pygame.time.Clock()
 
@@ -235,8 +244,8 @@ class GameController:
                 # must not end round if only some people checked
                 if not self._playersChecked or len(self._playersChecked) == len(self._activePlayers):
                     self.processRoundEnd()
-                elif self.getNumNonAllInPlayers() == len(self._playersChecked):
-                    self.processRoundEnd()
+                # elif self.getNumNonAllInPlayers() == len(self._playersChecked):
+                    # self.processRoundEnd()
 
             # process the currentPlayer if they are not the human user
             if not currentPlayer._isHuman:
@@ -254,7 +263,7 @@ class GameController:
                             except IndexError:
                                 pass
                             
-                        if self.roundEnded():
+                        if self.roundEnded(currentPlayer):
                             self.drawActionNames() # TODO: show the value of bet next to action
                             self.drawActionValue()
                             pygame.display.update()
@@ -302,7 +311,7 @@ class GameController:
             self._banker.activePlayerToDebtList(self._activePlayers) # set to 0
     
     def resetRound(self):
-        self._currentPlayerTurn = 0 # back to start of active player list.
+        self._currentPlayerTurn = self._activePlayers.index(self._firstRoundBetter) # back to start of active player list.
         self._roundCycleFinished = True # changes flag to show that we can move onto the next gameTurn if no raise happened.
         self._banker.resetCurrentRoundBets()
         self.resetAIActionNames()
@@ -480,7 +489,44 @@ class GameController:
                 # any button press or mouse press
                 if event.type == pygame.MOUSEBUTTONDOWN or event.type == pygame.KEYDOWN:
                     waitingForInput = False
-                
+
+    def setBlinds(self):
+        dealerButtonIndex = self._players.index(self._dealer._dealerButton)
+        smallBlindIndex = dealerButtonIndex + 1
+        bigBlindIndex = dealerButtonIndex + 2
+        
+        smallBlindIndex, bigBlindIndex = self.validateBlindIndexes(smallBlindIndex, bigBlindIndex)
+
+        self._smallBlind = self._players[smallBlindIndex]
+        self._bigBlind = self._players[bigBlindIndex]
+
+    def validateBlindIndexes(self, smallBlindIndex, bigBlindIndex):
+        if smallBlindIndex == len(self._players):
+            smallBlindIndex = 0
+            bigBlindIndex = 1
+
+        elif smallBlindIndex == len(self._players) - 1:
+            smallBlindIndex = smallBlindIndex
+            bigBlindIndex = 0
+        
+        return smallBlindIndex, bigBlindIndex
+
+    def rotateDealerButton(self):
+        if self._players[-1] == self._dealer._dealerButton:
+            self._dealer._dealerButton = self._players[0]
+        
+        else:
+            self._dealer._dealerButton = self._players[self._players.index(self._dealer._dealerButton) + 1]
+    
+    def decideFirstRoundBetter(self):
+        if self._bigBlind == self._players[-1]:
+            self._currentPlayerTurn = 0
+        
+        else:
+            self._currentPlayerTurn = self._players.index(self._bigBlind) + 1
+        
+        self._firstRoundBetter = self._players[self._currentPlayerTurn]
+
     def preFlop(self):
             # deals each player their hand -> then gives the cards their coordinates on the screen
             self._dealer.dealPlayerHands(self._players)
@@ -562,6 +608,25 @@ class GameController:
         # commence next game
         self.waitForInput()
         self.reset()
+        """
+        self.rotateDealerButton()
+        self.setBlinds()
+        self._banker.takeBlindMoney(self._smallBlind, self._smallBlind, self._bigBlind)
+
+        if self.playerIsGoingAllIn(self._smallBlind, self._banker._smallBlindBet):
+                self.setPlayerAllIn(self._smallBlind)
+                if self.shouldTriggerShowdown():
+                    self._showdownRunning = True
+
+        # TODO: OMGG PLEASE SHORTEN AND OPTIMISE THISSSSSSSSSSSSSSS YOU CHIMP!!!!!!!!!!!!!!!!!!!!!!!!
+        self._banker.takeBlindMoney(self._bigBlind, self._smallBlind, self._bigBlind)
+        if self.playerIsGoingAllIn(self._bigBlind, self._banker._bigBlindBet):
+                self.setPlayerAllIn(self._bigBlind)
+                if self.shouldTriggerShowdown():
+                    self._showdownRunning = True
+
+        self.decideFirstRoundBetter()
+        """    
         pygame.display.update()
         self.preFlop()
 
@@ -620,8 +685,8 @@ class GameController:
     def checkPostRiver(self):
         return self._gameTurn == 3
         
-    def roundEnded(self):   
-        if self._currentPlayerTurn > len(self._activePlayers) - 1:
+    def roundEnded(self, currentPlayer):   
+        if self.getNextPlayerTurn() == self._firstRoundBetter:
             self._clearActions = True # flag for resetting AI's actions
             return True
         
@@ -676,7 +741,7 @@ class GameController:
 
             # round finished when the last player has in the original cycle has made their turn.
             # this does not necesarrily mean we start the next round, since a raise could have occured.
-            if self.roundEnded():
+            if self.roundEnded(currentPlayer):
                 self.resetRound()
 
     def startNextRound(self):
@@ -927,7 +992,6 @@ class GameController:
                 return True  # found an X of a kind
         return False  # no X of a kind
 
-
     def twoPair(self, mergedCards):
         # checks for 2, 2 of a kinds
         # e.g. king of spades, king of hearts + queen of clubs, queen of diamonds
@@ -1047,6 +1111,7 @@ class GameController:
 class Dealer:
     def __init__(self):
         self._deck = Deck().createDeck() # list of 52 Card objects, in order
+        self._dealerButton = None
 
     def dealCard(self):
         if len(self._deck) > 1:
@@ -1085,16 +1150,22 @@ class Dealer:
     # has uses for when resetting a game, e.g. the end of a game or the monte-carlo sims.
     def recreateDeck(self):
         self._deck = Deck().createDeck()
-        
+    
+    def setDealerButton(self, players):
+        pickedPlayer = random.choice(players)
+        self._dealerButton = pickedPlayer
+
 
 class Banker:
     def __init__(self):
         self._fundedPlayers = []
         self._pot = 0
-        self._previousBet = 10 # determined on blinds later.
-        self._currentBet = 20 # will change!!!
+        self._smallBlindBet = 10
+        self._bigBlindBet = self._smallBlindBet * 2
+        self._previousBet = self._bigBlindBet # determined on blinds later.
+        self._currentBet = self._previousBet # will change!!!
         self._minRaise = (self._currentBet - self._previousBet) + self._currentBet
-        self._callValue = 20
+        self._callValue = self._bigBlindBet
         self._lastRaise = 0
         self._currentRoundBets = {} # player-bet dict for collecting the debts of those who need to pay after a raise to continue.
         self._raiseDebts = {} # debt needed to be paid if someone raises by the other players.
@@ -1237,6 +1308,21 @@ class Banker:
             
         return playersToRemove
 
+    def takeBlindMoney(self, blind, smallBlind, bigBlind):
+        if blind == smallBlind:
+            bet = self._smallBlindBet
+        else:
+            bet = self._bigBlindBet
+
+        if self.betGreaterThanBank(bet, blind._bank):
+            debtPaid = blind._bank
+        else:
+            debtPaid = bet
+        
+        self._pot += debtPaid
+        blind._bank -= debtPaid
+        self.addToCurrentRoundBets(blind, debtPaid)
+        self.addToBetTotal(blind, debtPaid)
 
 class Card:
     def __init__(self, value, suit, loadImage=True):

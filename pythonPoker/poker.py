@@ -100,6 +100,8 @@ AINames = {
     5: "richy"
 }
 
+AIs = ["human", "sharky", "rusher", "stackz", "sphinx", "richy"]
+
 screen = pygame.display.set_mode((screenWidth, screenHeight))
 
 
@@ -165,7 +167,9 @@ class GameController:
         # values for initialMinCall is a temp value
         self._initalMinCall = 20
         self._availableActions = ["call", "check", "fold", "raise"] # used for validation of moves.
-        # self._allInPlayers = []
+        self._showdownRunning = False
+        self._isEarlyWin = False
+        self._lastPlayer = None
 
     def gameLoop(self):
         for nameIndex in AINames.keys():
@@ -181,11 +185,11 @@ class GameController:
         self.preFlop() # deals everyone 2 cards and starts the game.
         clock = pygame.time.Clock()
 
-        self._activePlayers[0]._bank = 100
+        # self._activePlayers[0]._bank = 100
+        # self._lastPlayer = self.lastPlayerInTurnOrder()
         
         while True:
             currentPlayer = self._activePlayers[self._currentPlayerTurn] # this variable used for checks and validation this persons turn.
-        
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     exit()
@@ -212,7 +216,7 @@ class GameController:
                                 
                             else:
                                 self.humanAction(namedAction, currentPlayer, self._banker._minRaise)
-                                self.handlePrematureWin()
+                                self.isEarlyWin() # checks for early win
 
                     raiseButton = self._buttons.getButtonObject("raise")
                     raiseButton._active = True
@@ -239,7 +243,7 @@ class GameController:
                         # TODO: must change bet limits based on a valid turn
                         # action is always valid at this point
                         self.processAction(currentPlayer._actionName, currentPlayer, currentPlayer._raiseAmount)
-                        self.handlePrematureWin()
+                        self.isEarlyWin()
                         if currentPlayer == len(self._activePlayers):
                             currentPlayer = self._activePlayers[0]
                         else:
@@ -259,7 +263,7 @@ class GameController:
             
             if currentPlayer._isHuman and self.currentPlayerIsAllIn(currentPlayer):
                 self.skipAllInPlayerTurn()
-
+            
             # draw order MUST be background then table 
             screen.fill(POKERGREEN) # background
             self.drawTable()
@@ -273,6 +277,12 @@ class GameController:
             self.drawPlayerMoney()
             self.drawRaiseField()
             # e.g. -> raise (50). call (10), all-in (200)
+
+            if self._showdownRunning and currentPlayer != self.lastPlayerInTurnOrder():
+                self.showdown()
+            
+            if self._isEarlyWin == True:
+                self.handlePrematureWin()
 
             pygame.display.update()
             clock.tick(60) # 60 fps
@@ -294,6 +304,7 @@ class GameController:
         self._roundCycleFinished = True # changes flag to show that we can move onto the next gameTurn if no raise happened.
         self._banker.resetCurrentRoundBets()
         self.resetAIActionNames()
+        
         # self._banker.activePlayerToDebtList(self._activePlayers) # set to 0
 
     def drawWinnerText(self, winner):
@@ -349,7 +360,7 @@ class GameController:
             if self.playerIsGoingAllIn(player, raiseAmount):
                 self.setPlayerAllIn(player)
                 if self.allPlayersAllIn():
-                    self.showdown()
+                    self._showdownRunning = True
 
         elif action == "fold":
             self._activePlayers.remove(player)
@@ -365,7 +376,7 @@ class GameController:
             self._banker.removeFromDebts(player)
             if self.allPlayersAllIn():
                 # self._activePlayers = self._allInPlayers
-                self.showdown()
+                self._showdownRunning = True
         
         elif action == "call":
             self.removeFromCheckList(player)
@@ -373,7 +384,7 @@ class GameController:
             if self.playerIsGoingAllIn(player, self._banker._callValue):
                 self.setPlayerAllIn(player)
                 if self.allPlayersAllIn():
-                    self.showdown()
+                    self._showdownRunning = True
 
         elif action == "check":
             self._playersChecked.append(player)
@@ -469,7 +480,7 @@ class GameController:
                 # AI's done separately since they have different coord lists and data types
                 elif player._isHuman == False:
                     # AI coords stored in dicts, this is used to access the value from the k-v pair
-                    AiIndex = self._players.index(player)
+                    AiIndex = AIs.index(player._name)
 
                     # looping over the player's hand here to set the AI's hand coords in the same way as the player since its modular
                     for index, card in enumerate(player._hand):
@@ -530,6 +541,9 @@ class GameController:
         # TODO: need a win/loss screen, if they run outta money -> lose, if everyone else broke -> win! -> retry/exit screen
         self.waitForInput()
         self.reset()
+
+        # self.removeFromGame(self._banker.getNoMoneyPlayers(self._activePlayers))
+
         pygame.display.update()
         self.preFlop()
 
@@ -541,7 +555,14 @@ class GameController:
         if self._currentPlayerTurn > len(self._activePlayers) - 1:
             self._clearActions = True # flag for resetting AI's actions
             return True
-    
+        
+    def removeFromGame(self, playerToBeRemoved):
+        for player in playerToBeRemoved:
+            indexed = self._players.index(playerToBeRemoved)
+            self._players[indexed] = None
+            # if player in AINames:
+                # del AINames[player]
+            
     def computerAction(self):
         # was erroring before this due to indexing the next player's turn when the currentplayerturn needed to be indexed
         # now a turn is not executed or computed if the current player is at the end, since it should be finished
@@ -670,7 +691,7 @@ class GameController:
     # draws "raise", "call", "fold" or "check" next to the AI's name
     # TODO: implement quantity of money next to action name (prototype 3)
     def drawActionNames(self):
-        for posIndex in AINames.keys():
+        for posIndex in range(1, len(self._activePlayers)):
             # string of their action, this will makeup the text i draw e.g. "raise"
             AIAction = self._players[posIndex].getActionName()
 
@@ -691,7 +712,7 @@ class GameController:
 
     # draws a "my turn" in the middle of the cards for clarity
     def drawTurnIndicator(self, currentPlayer):
-        if self.checkPostRiver() == False:
+        if self.checkPostRiver() == False and not self._showdownRunning:
             turnText = turnIndicatorFont.render("my turn", True, RED)
             textRect = turnText.get_rect() # use the rectangle for positions it
             heightSpacer = 5 # visuals, so it's not too close to the cards, looks more pleasant
@@ -822,6 +843,8 @@ class GameController:
                 valueCount[card._value] += 1  # increment count for duplicates
         return valueCount
 
+    def lastPlayerInTurnOrder(self):
+        return self._activePlayers[-1]
 
     def hasXOfAKind(self, mergedCards, matchingValue):
         # checks if any card value appears exactly matchingValue amount of times
@@ -894,17 +917,19 @@ class GameController:
     
     def handlePrematureWin(self):
         # restructure this logic, used again in postriver
-        if len(self._activePlayers) == 1 and self._gameTurn < 3: # and len(self._allInPlayers) == 0:
-            self._banker.givePotToWinner(self._activePlayers[0])
-            self.drawWinnerText(self._activePlayers[0])
-            pygame.display.update()
+        self._banker.givePotToWinner(self._activePlayers[0])
+        self.drawWinnerText(self._activePlayers[0])
+        pygame.display.update()
 
-            # commence next game
-            # TODO: need a win/loss screen, if they run outta money -> lose, if everyone else broke -> win! -> retry/exit screen
-            self.waitForInput() # NOTE: may not need.
-            self.reset()
-            pygame.display.update()
-            self.preFlop()
+        # commence next game
+        # TODO: need a win/loss screen, if they run outta money -> lose, if everyone else broke -> win! -> retry/exit screen
+        self.waitForInput() # NOTE: may not need.
+        self.reset()
+        pygame.display.update()
+        self.preFlop()
+
+    def isEarlyWin(self):
+        return len(self._activePlayers) == 1 and self._gameTurn < 3
 
     # all flags must be reset
     # deck must be shuffled and reset
@@ -925,7 +950,9 @@ class GameController:
         self._banker._callValue = 20
         self._banker._previousBet, self._banker._currentBet = 10, 20
         self._banker.activePlayerToDebtList(self._activePlayers)
-        
+        self._showdownRunning = False
+        self._isEarlyWin = False
+
         for player in self._players:
             player._isAllIn = False
 
@@ -1107,7 +1134,7 @@ class Banker:
 
         for player in activePlayers:
             # print(self._playerToTotalMoneyIn)
-            if player != winner:
+            if player != winner and player in self._playerToTotalMoneyIn:
                 moneyReturned = self._playerToTotalMoneyIn[player] - winnerMoneyIn 
                 if moneyReturned < 0:
                     moneyReturned = 0
@@ -1122,6 +1149,14 @@ class Banker:
             for player, moneyBack in moneyReturns.items():
                 player._bank += moneyBack
                 self._pot -= moneyBack
+
+    def getNoMoneyPlayers(self, activePlayers):
+        playersToRemove = []
+        for player in activePlayers:
+            if player._bank == 0:
+                playersToRemove.append(player)
+            
+        return playersToRemove
 
 class Card:
     def __init__(self, value, suit, loadImage=True):

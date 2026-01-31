@@ -4,6 +4,10 @@ import time
 
 pygame.init()
 pygame.font.init()
+
+infoFont = pygame.font.SysFont("consolas", 18)
+infoFont.set_bold(True)
+
 fontConsolas = pygame.font.SysFont("Consolas", 35)
 fontVerdana = pygame.font.SysFont("Verdana", 30)
 turnIndicatorFont = pygame.font.SysFont("Consolas", 25)
@@ -60,14 +64,14 @@ communityCardY = screenHeight - communityCardYGap # all community cards share th
 pokerTableYSpacer = 40 # controls the height of the poker table from the bottom of the screen
 pokerTableX = (screenWidth - tableWidth) / 2
 pokerTableY = (screenHeight - tableHeight) / 2 - pokerTableYSpacer
-pokerTable = pygame.transform.scale(pygame.image.load("table/poker_table.png"), (tableWidth, tableHeight))
+pokerTable = pygame.transform.scale(pygame.image.load("assets/table/poker_table.png"), (tableWidth, tableHeight))
 
 # must be loaded outside the card class for performance, since it would be computationally heavy for every card
 # to have this inside the card class would mean every card loads its own image, makes it slow.
-cardBack = pygame.transform.scale(pygame.image.load("cardBacks/card_back_red.png"), (cardWidth, cardHeight)) 
+cardBack = pygame.transform.scale(pygame.image.load("assets/cardBacks/card_back_red.png"), (cardWidth, cardHeight)) 
 
 dealerButtonWidth, dealerButtonHeight = 50, 50
-dealerButton = pygame.transform.scale(pygame.image.load("dealerButton/dealer_button.png"), (dealerButtonWidth, dealerButtonHeight)) 
+dealerButton = pygame.transform.scale(pygame.image.load("assets/dealerButton/dealer_button.png"), (dealerButtonWidth, dealerButtonHeight)) 
 
 # AI positions -> clockwise from player's left
 # the left 2 positions start at 23/100ths of the screen width, therefore the right 2 must be at 1 - 0.23 = 0.77
@@ -230,9 +234,10 @@ class GameController:
                                 currentPlayer = self._activePlayers[self._currentPlayerTurn]
                                 self.isEarlyWin() # checks for early win
 
-                    raiseButton = self._buttons.getButtonObject("raise")
-                    raiseButton._active = True
-            
+                        else:
+                            raiseButton = self._buttons.getButtonObject("raise")
+                            raiseButton._active = True
+                    
             # round end if raise
             if self._raiseHappened:
                 if self.raiseCycleFinished(): # checks if we are back to the raiser's turn.
@@ -888,17 +893,28 @@ class GameController:
     
         screen.blit(dealerButton, (dealerButtonX, dealerButtonY))
     
-    def drawPokerAssets(self):
-        screen.fill(POKERGREEN) # background
-        self.drawTable()
-        self.drawCards() # method also draws the back of the cards
-        self.drawAINames()
-        self.drawActionNames() # TODO: show the value of bet next to action
-        self.drawActionValue()
-        self.drawPotMoney()
-        self.drawPlayerMoney()
-        self.drawRaiseField()
-        self.drawDealerButton()
+    def drawGameInfo(self):
+        # key game information in the top right corner
+        betX = screenWidth - 180  # pixels from right edge
+        betY = 10  # pixels from top
+        lineHeight = 25  # spacing between lines
+        blindX = screenWidth - 350
+        blindY = 10
+        
+        callValue = self._banker._callValue
+        minRaise = self._banker._minRaise
+        smallBlindValue = self._banker._smallBlindBet
+        bigBlindValue = self._banker._bigBlindBet
+
+        callValueText = infoFont.render(f"bet call: £{callValue}", True, WHITE)
+        minRaiseText = infoFont.render(f"minraise: £{minRaise}", True, WHITE)
+        smallBlindText = infoFont.render(f"s.blind: £{smallBlindValue}", True, WHITE)
+        bigBlindText = infoFont.render(f"b.blind: £{bigBlindValue}", True, WHITE)
+        
+        screen.blit(callValueText, (betX, betY))
+        screen.blit(minRaiseText, (betX, betY + lineHeight))
+        screen.blit(smallBlindText, (blindX, blindY))
+        screen.blit(bigBlindText, (blindX, blindY + lineHeight))
 
     # draws a "my turn" in the middle of the cards for clarity
     def drawTurnIndicator(self, currentPlayer):
@@ -924,6 +940,19 @@ class GameController:
                         return
 
             screen.blit(turnText, textRect)
+
+    def drawPokerAssets(self):
+        screen.fill(POKERGREEN) # background
+        self.drawTable()
+        self.drawCards() # method also draws the back of the cards
+        self.drawAINames()
+        self.drawActionNames() 
+        self.drawActionValue()
+        self.drawPotMoney()
+        self.drawPlayerMoney()
+        self.drawRaiseField()
+        self.drawDealerButton()
+        self.drawGameInfo()
 
     # stop drawing the back of the AI's cards, this is when we decide a winner and everyone who still playing shows their cards
     def revealAICards(self):
@@ -1218,8 +1247,8 @@ class Banker:
         self._pot = 0
         self._smallBlindBet = 10
         self._bigBlindBet = self._smallBlindBet * 2
-        self._previousBet = self._bigBlindBet # determined on blinds later.
-        self._currentBet = self._previousBet # will change!!!
+        self._previousBet = self._smallBlindBet # determined on blinds later.
+        self._currentBet = self._bigBlindBet # will change!!!
         self._minRaise = (self._currentBet - self._previousBet) + self._currentBet
         self._callValue = self._bigBlindBet
         self._lastRaise = 0
@@ -1364,12 +1393,12 @@ class Card:
     def __init__(self, value, suit, loadImage=True):
         self._value = value
         self._suit = suit
-        self._path = f"cards/{self.getName()}.png"
+        self._path = f"assets/cards/{self.getName()}.png"
         self._width = cardWidth
         self._height = cardHeight
         self._x = self._y = None
         if loadImage:
-            path = f"cards/{self.getName()}.png"
+            path = f"assets/cards/{self.getName()}.png"
             self._image = pygame.transform.scale(pygame.image.load(path), (cardWidth, cardHeight))
         else:
             self._image = None

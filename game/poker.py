@@ -66,6 +66,9 @@ pokerTable = pygame.transform.scale(pygame.image.load("table/poker_table.png"), 
 # to have this inside the card class would mean every card loads its own image, makes it slow.
 cardBack = pygame.transform.scale(pygame.image.load("cardBacks/card_back_red.png"), (cardWidth, cardHeight)) 
 
+dealerButtonWidth, dealerButtonHeight = 50, 50
+dealerButton = pygame.transform.scale(pygame.image.load("dealerButton/dealer_button.png"), (dealerButtonWidth, dealerButtonHeight)) 
+
 # AI positions -> clockwise from player's left
 # the left 2 positions start at 23/100ths of the screen width, therefore the right 2 must be at 1 - 0.23 = 0.77
 # this is a dict for robustness, instead of relying on indexes i would rather have the k-v pair for this.
@@ -187,15 +190,13 @@ class GameController:
         self._dealer.setDealerButton(self._activePlayers)
         self.setBlinds()
 
+        self.drawPokerAssets()
         self._banker.takeBlindMoney(self._smallBlind, self._smallBlind, self._bigBlind)
         self._banker.takeBlindMoney(self._bigBlind, self._smallBlind, self._bigBlind)
 
         self.preFlop() # deals everyone 2 cards and starts the game.
         clock = pygame.time.Clock()
-
-        # self._activePlayers[0]._bank = 100
-        # self._lastPlayer = self.lastPlayerInTurnOrder()
-        
+     
         while True:
             if self._currentPlayerTurn >= len(self._activePlayers):
                 self._currentPlayerTurn = 0
@@ -214,13 +215,13 @@ class GameController:
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1: # if left click
                         # loops over all buttons to see if one was clicked
-                        if self._buttons.buttonWasClicked() == True: 
+                        if self._buttons.buttonWasClicked(): 
 
                             # e.g. namedAction = "raise", used for validation and general processing
                             namedAction = self._buttons.getActionName()
                             buttonObject = self._buttons.getButtonObject(namedAction)
 
-                            if namedAction == "raise" and buttonObject._active == True:
+                            if namedAction == "raise" and buttonObject._active:
                                 buttonObject._active = False
                                 self._raiseField._active = True
                                 
@@ -275,27 +276,44 @@ class GameController:
                 self.skipAllInPlayerTurn()
             
             # draw order MUST be background then table 
-            screen.fill(POKERGREEN) # background
-            self.drawTable()
+            self.drawPokerAssets()
             self._buttons.drawAllButtons(currentPlayer._isHuman and not currentPlayer._isAllIn) # buttons are only drawn if it is the player's turn.
-            self.drawCards() # method also draws the back of the cards
-            self.drawAINames()
-            self.drawActionNames() # TODO: show the value of bet next to action
-            self.drawActionValue()
             self.drawTurnIndicator(currentPlayer)
-            self.drawPotMoney()
-            self.drawPlayerMoney()
-            self.drawRaiseField()
-            # e.g. -> raise (50). call (10), all-in (200)
 
             if self._showdownRunning and currentPlayer != self.lastPlayerInTurnOrder():
                 self.showdown()
             
-            if self._isEarlyWin == True:
+            if self._isEarlyWin:
                 self.handlePrematureWin()
 
             pygame.display.update()
             clock.tick(60) # 60 fps
+    
+    def getAIPosition(self, player):
+        if player._isHuman or player._name not in AIs:
+            return None
+        index = AIs.index(player._name)
+        if index not in AIPosX or index not in AIPosY:
+            return None
+        return (AIPosX[index], AIPosY[index], index)
+    
+    def getNextIndex(self, current, list_length):
+        return 0 if current >= list_length - 1 else current + 1
+    
+    def assignCardPositions(self, cards, xCoords, yCoord):
+        for index, card in enumerate(cards):
+            card.setPos(xCoords[index], yCoord)
+    
+    def getPlayerTextPosition(self, player, xOffset=0, yOffset=0):
+        if player._isHuman:
+            return (handCardX[0] + xOffset, handCardY + yOffset)
+        
+        pos = self.getAIPosition(player)
+        if pos:
+            x_coords, y_coord, index = pos
+            return (x_coords[0] + xOffset, y_coord + yOffset)
+        return None
+
 
     def processRoundEnd(self):
         if self.checkPostRiver(): # gameTurn == 3 -> end
@@ -452,7 +470,7 @@ class GameController:
         allIn = True
         count = 0
         for player in self._activePlayers:
-            if player._isAllIn == False:
+            if not player._isAllIn:
                 count += 1
                 if count > 1:
                     return False
@@ -463,7 +481,7 @@ class GameController:
         print("SHOOOOOWDOWN!")
 
         self.revealAICards()
-        while self.checkPostRiver() == False:
+        while not self.checkPostRiver():
             self.processRoundEnd()
             self.drawCards()
             self.revealAICards()
@@ -519,41 +537,31 @@ class GameController:
         return smallBlindIndex, bigBlindIndex
 
     def rotateDealerButton(self):
-        if self._players[-1] == self._dealer._dealerButton:
-            self._dealer._dealerButton = self._players[0]
-        
-        else:
-            self._dealer._dealerButton = self._players[self._players.index(self._dealer._dealerButton) + 1]
+        currentIndex = self._players.index(self._dealer._dealerButton)
+        nextIndex = self.getNextIndex(currentIndex, len(self._players))
+        self._dealer._dealerButton = self._players[nextIndex]
+
     
     def preFlop(self):
-            # deals each player their hand -> then gives the cards their coordinates on the screen
-            self._dealer.dealPlayerHands(self._players)
+        # deals each player their hand -> then gives the cards their coordinates on the screen
+        self._dealer.dealPlayerHands(self._players)
 
-            for player in self._activePlayers:
-                if player._isHuman == True: # human player will have their cards visible 
-                    for index, card in enumerate(player._hand):
-
-                        # this loop gets the index of the card in the player hand#
-                        # then at that same index in the handCardX list, that x-coordinate is given
-                        card.setPos(handCardX[index], handCardY)
-
-                # AI's done separately since they have different coord lists and data types
-                elif player._isHuman == False:
-                    # AI coords stored in dicts, this is used to access the value from the k-v pair
-                    AiIndex = AIs.index(player._name)
-
-                    # looping over the player's hand here to set the AI's hand coords in the same way as the player since its modular
-                    for index, card in enumerate(player._hand):
-                        handCardPosXList = AIPosX[AiIndex]
-                        handCardPosY = AIPosY[AiIndex]
-                        card.setPos(handCardPosXList[index], handCardPosY)
-        
+        for player in self._activePlayers:
+            if player._isHuman:
+                self.assignCardPositions(player._hand, handCardX, handCardY)
+            else:
+                # AI coords stored in dicts
+                pos = self.getAIPosition(player)
+                if pos:
+                    x_coords, y_coord, index = pos
+                    self.assignCardPositions(player._hand, x_coords, y_coord)
+    
     def flop(self):
         # 3 cards are dealt from the deck and added to the GameController's self._communityCard list
         self._dealer.dealFlop(self._communityCards)
-        for index, card in enumerate(self._communityCards):
-            # assigns the community card x-coordinate according to its index in the community card list
-            card.setPos(communityCardX[index], communityCardY)
+
+        # assigns the community card x-coordinate according to its index in the community card list
+        self.assignCardPositions(self._communityCards, communityCardX, communityCardY)
 
     def turn(self):
         # deal 1 community card from the deck and add to communityCard list
@@ -735,7 +743,7 @@ class GameController:
         
         currentPlayer = self._activePlayers[self._currentPlayerTurn]
 
-        if currentPlayer._isHuman == True: # do not do an AI's turn if waiting for player to press button and do their turn
+        if currentPlayer._isHuman: # do not do an AI's turn if waiting for player to press button and do their turn
             return False 
         
         canCheck = "check" in self._availableActions
@@ -750,7 +758,7 @@ class GameController:
         return True
 
     def humanAction(self, namedAction, currentPlayer, raiseAmount):
-        if self.validAction(namedAction) and currentPlayer._isHuman == True:
+        if self.validAction(namedAction) and currentPlayer._isHuman:
             self.processAction(namedAction, currentPlayer, raiseAmount)
             self._currentPlayerTurn += 1 # since the action is guaranteed valid we can move the next player.
 
@@ -760,10 +768,14 @@ class GameController:
                 self.resetRound()
 
     def startNextRound(self):
-        # NOTE: WTFF?? self._currentPlayerTurn += 1 # starting player will be at the 0th index
-        self._gameTurn += 1 # goes to the next game turn e.g self.flop -> self.turn
-        self.gameTurnState[self._gameTurn]() # calls the function from the key-value pair
-        self._availableActions = ["call", "check", "fold", "raise"] # reset the available actions, allowing players to check again.
+        self._gameTurn += 1
+        self.gameTurnState[self._gameTurn]()
+
+        # reset the available actions, allowing players to check again.
+        self._availableActions = ["call", "check", "fold", "raise"]
+        self._playersChecked.clear()
+        self._raiseHappened = False
+        self._raiser = None
 
     # stops AI's actions having persistance on a new round, they are reset back to an empty string
     def resetAIActionNames(self):
@@ -774,12 +786,12 @@ class GameController:
         self._clearActions = False # reset flag since action is now complete
 
     def drawRaiseField(self):
-        if self._raiseField._active == True:
+        if self._raiseField._active:
             self._raiseField.drawTextInput()
 
     def drawCards(self):
         for player in self._activePlayers: # activePlayers instead of players since it shows someone folds when their cards are not drawn
-            if player._isHuman == True: 
+            if player._isHuman: 
                 for card in player._hand:
                     if card._x != None and card._y != None: # was trying to draw AI cards and error 
                         card.draw() # draw to screen not from hand
@@ -803,11 +815,11 @@ class GameController:
     def drawAINames(self):
         for player in self._players:
             if not player._isHuman:
-                if player._name in AIs:
-                    posIndex = AIs.index(player._name)
-                    if posIndex in AIPosX and posIndex in AIPosY:
-                        nameText = fontVerdana.render(player._name, True, WHITE)
-                        screen.blit(nameText, (AIPosX[posIndex][0], AIPosY[posIndex] + cardHeight))
+                pos = self.getAIPosition(player)
+                if pos:
+                    x_coords, y_coord, index = pos
+                    nameText = fontVerdana.render(player._name, True, WHITE)
+                    screen.blit(nameText, (x_coords[0], y_coord + cardHeight))
 
     def drawPotMoney(self):
         potText = "pot £" + str(self._banker._pot)
@@ -821,7 +833,7 @@ class GameController:
             bankText = moneyFont.render(bankText, True, WHITE)
             textRect = bankText.get_rect()
 
-            if player._isHuman == True:
+            if player._isHuman:
                 bankTextX = handCardX[0]
                 bankTextY = handCardY + cardWidth + textRect.height * 2.5
             else:
@@ -841,13 +853,12 @@ class GameController:
     def drawActionNames(self):
         for player in self._players:
             if not player._isHuman:
-                if player._name in AIs:
-                    posIndex = AIs.index(player._name)
-                    AIAction = player.getActionName()
-
-                    if AIAction != "" and posIndex in AIPosX and posIndex in AIPosY:
-                        actionText = fontVerdana.render(AIAction, True, LIGHT_BLACK)
-                        screen.blit(actionText, (AIPosX[posIndex][1], AIPosY[posIndex] + cardHeight))
+                pos = self.getAIPosition(player)
+                AIAction = player.getActionName()
+                if AIAction != "" and pos:
+                    x_coords, y_coord, index = pos
+                    actionText = fontVerdana.render(AIAction, True, LIGHT_BLACK)
+                    screen.blit(actionText, (x_coords[1], y_coord + cardHeight))
 
     def drawActionValue(self):    
         for player in self._activePlayers:
@@ -856,16 +867,42 @@ class GameController:
 
             if not player._isHuman and player in self._banker._currentRoundBets:
                 if player._actionName != "fold" and player._actionName != "check": # old bug no actionName
-                    if player._name in AIs:
-                        playerIndex = AIs.index(player._name)
-                        if playerIndex in AIPosX and playerIndex in AIPosY:
-                            moneyText = str(self._banker._currentRoundBets[player])
-                            moneyText = fontVerdana.render(moneyText, True, LIGHT_BLACK) 
-                            screen.blit(moneyText, (AIPosX[playerIndex][1] + 80, AIPosY[playerIndex] + cardHeight))
+                     pos = self.getAIPosition(player)
+                     if pos:
+                        x_coords, y_coord, index = pos
+                        moneyText = str(self._banker._currentRoundBets[player])
+                        moneyText = fontVerdana.render(moneyText, True, LIGHT_BLACK) 
+                        screen.blit(moneyText, (x_coords[1] + 80, y_coord + cardHeight))
+    
+    def drawDealerButton(self):
+        dealerButtonPlayer = self._dealer._dealerButton
+
+        if dealerButtonPlayer._isHuman:
+            dealerButtonX = handCardX[0]
+            dealerButtonY = handCardY + cardHeight - dealerButtonHeight
+
+        else:
+            pos = self.getAIPosition(dealerButtonPlayer)
+            dealerButtonX = pos[0][0]
+            dealerButtonY = pos[1] + cardHeight - dealerButtonHeight
+    
+        screen.blit(dealerButton, (dealerButtonX, dealerButtonY))
+    
+    def drawPokerAssets(self):
+        screen.fill(POKERGREEN) # background
+        self.drawTable()
+        self.drawCards() # method also draws the back of the cards
+        self.drawAINames()
+        self.drawActionNames() # TODO: show the value of bet next to action
+        self.drawActionValue()
+        self.drawPotMoney()
+        self.drawPlayerMoney()
+        self.drawRaiseField()
+        self.drawDealerButton()
 
     # draws a "my turn" in the middle of the cards for clarity
     def drawTurnIndicator(self, currentPlayer):
-        if self.checkPostRiver() == False and not self._showdownRunning:
+        if not self.checkPostRiver() and not self._showdownRunning:
             turnText = turnIndicatorFont.render("my turn", True, RED)
             textRect = turnText.get_rect() # use the rectangle for positions it
             heightSpacer = 5 # visuals, so it's not too close to the cards, looks more pleasant
@@ -893,7 +930,7 @@ class GameController:
         # using activePlayers, since folded players do not have to show their cards
         # since, it may be confusing if a folded player actually won and it says someone else won since they were still in the game
         for player in self._activePlayers:
-            if player._isHuman == False: # only applies to the AI, human cards always visible to the human player
+            if not player._isHuman: # only applies to the AI, human cards always visible to the human player
                 for card in player._hand:
                     if card._x != None and card._y != None: 
                         card.draw() # draw to screen not from hand
@@ -930,9 +967,9 @@ class GameController:
             nextCardStrValue = orderedCardList[cardIndex + 1]._value
 
             # adjust ace value if low ace mode is on
-            if currentCardStrValue == "ace" and isLowAce == True:
+            if currentCardStrValue == "ace" and isLowAce:
                 currentCardIntValue = 1 # ace can be either 1 or max (14)
-            if nextCardStrValue == "ace" and isLowAce == True:
+            if nextCardStrValue == "ace" and isLowAce:
                 nextCardIntValue = 1
 
             # check if the next card continues the sequence
@@ -941,10 +978,10 @@ class GameController:
                 # once we hit 5 in a row we have a straight
                 if count == 5:
                     # if we're not checking for straight flush we're done
-                    if checkStraightFlush == False:
+                    if not checkStraightFlush:
                         return True
                     # otherwise check if these 5 cards share the same suit
-                    if checkStraightFlush == True:
+                    if checkStraightFlush:
                         # card index - 3 refers to the start of the straight
                         # card index + 2 refers to the end of the straight
                         #  we must also check if the straight has a flush too
@@ -1198,32 +1235,22 @@ class Banker:
         for player in self._fundedPlayers:
             player._bank = initalBank
     
+    def processBet(self, player, amount):
+        player._bank -= amount
+        self._pot += amount
+        self.addToCurrentRoundBets(player, amount)
+        self.addToBetTotal(player, amount)
+    
     def handleCall(self, player):
-        if self.playerHasDebt(player) == True:
-            
+        if self.playerHasDebt(player):
             debtToPay = self._raiseDebts[player]
-            if self.betGreaterThanBank(debtToPay, player._bank):
-                debtPaid = player._bank
-            else:
-                debtPaid = debtToPay
-                
-            player._bank -= debtPaid
-            self._pot += debtPaid
-            self.addToCurrentRoundBets(player, debtToPay)
-            self.addToBetTotal(player, debtToPay)
+            debtPaid = player._bank if self.betGreaterThanBank(debtToPay, player._bank) else debtToPay
+            self.processBet(player, debtPaid)
 
         else:
-            if player._bank < self._callValue:
-                moneyIn = player._bank
-            else:
-                moneyIn = self._callValue
-                
-            player._bank -= moneyIn
-            self._pot += moneyIn
+            moneyIn = player._bank if player._bank < self._callValue else self._callValue
             self._raiseDebts[player] -= moneyIn
-            # print("minr", self._minRaise)
-            self.addToCurrentRoundBets(player, moneyIn)
-            self.addToBetTotal(player, moneyIn)
+            self.processBet(player, moneyIn)
     
     def moneyAlreadyIn(self, player):
         return self._currentRoundBets.get(player, 0) > 0
@@ -1232,28 +1259,16 @@ class Banker:
         self._minRaise = self._currentBet + self._lastRaise 
 
     def handleRaise(self, player, raiseAmount):
-        # add checking for enough money in bank
-        # if raiseAmount > self._minRaise:
-        
-        if self._currentBet:
-            self._currentBet = raiseAmount
-        else:
-            self._currentBet = self._callValue
-
+        self._currentBet = raiseAmount if self._currentBet else self._callValue
         self._previousBet = self._currentBet
-        # print("PREV", self._previousBet)
         self._lastRaise = raiseAmount - self._previousBet
-
-        self._pot += raiseAmount
         
-        player._bank -= raiseAmount
+        self.processBet(player, raiseAmount)
+        
         self.setMinRaise()
         self._callValue = self._currentBet
         print("minr", self._minRaise)
         self._raiseDebts[player] -= raiseAmount
-
-        self.addToCurrentRoundBets(player, raiseAmount)
-        self.addToBetTotal(player, raiseAmount)
         self.calculatePlayerDebts(player, raiseAmount)
 
     def addToCurrentRoundBets(self, player, bet):
@@ -1321,7 +1336,7 @@ class Banker:
 
     def distributeMoney(self, activePlayers, winner):
         moneyReturns = self.moneyReturnsDict(activePlayers, winner)
-        if winner._isAllIn == True:
+        if winner._isAllIn:
             for player, moneyBack in moneyReturns.items():
                 player._bank += moneyBack
                 self._pot -= moneyBack
@@ -1342,15 +1357,8 @@ class Banker:
             bet = self._bigBlindBet
             self._raiseDebts[blind] = 0 # bug!
 
-        if self.betGreaterThanBank(bet, blind._bank):
-            debtPaid = blind._bank
-        else:
-            debtPaid = bet
-        
-        self._pot += debtPaid
-        blind._bank -= debtPaid
-        self.addToCurrentRoundBets(blind, debtPaid)
-        self.addToBetTotal(blind, debtPaid)
+        debtPaid = blind._bank if self.betGreaterThanBank(bet, blind._bank) else bet
+        self.processBet(blind, debtPaid)
 
 class Card:
     def __init__(self, value, suit, loadImage=True):
@@ -1689,7 +1697,7 @@ class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
         screen.blit(self._text, textRect) 
 
     def drawButton(self):
-        if self._active == True:
+        if self._active:
             # draw the button a darker shade to show that you are hovering over it.
             if self.isHoveringOverButton():
                 # hover colour is a greyish colour
@@ -1704,7 +1712,7 @@ class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
         return self.collidepoint(pygame.mouse.get_pos())
 
     def wasClicked(self):
-        if self.collidepoint(pygame.mouse.get_pos()) and self._active == True:
+        if self.collidepoint(pygame.mouse.get_pos()) and self._active:
             # if the player clicks this button then hadouken! do the button's action
             return True # signifies yes (True) this button has been pressed
         
@@ -1723,7 +1731,7 @@ class TextField(pygame.Rect):
         self._colour = WHITE
 
     def drawTextInput(self):
-        if self._active == True:
+        if self._active:
             pygame.draw.rect(screen, self._colour, self)
             screen.blit(moneyFont.render(self._text, True, BLACK), (self.x, self.y)) 
 
@@ -1739,7 +1747,7 @@ class TextField(pygame.Rect):
                 self._active = False
                 self._text = ""
 
-        if event.type == pygame.KEYDOWN and self._active == True:
+        if event.type == pygame.KEYDOWN and self._active:
 
             # delete
             if event.key == pygame.K_BACKSPACE:
@@ -1767,7 +1775,7 @@ class ButtonManager:
     # check if any button on screen was clicked, returns True if so, False if not.
     def buttonWasClicked(self):
         for button in self._buttons.values(): # loops over dict() keys
-            if button.wasClicked() == True:
+            if button.wasClicked():
                 return True
             
         return False # must always return something
@@ -1779,15 +1787,15 @@ class ButtonManager:
     # returns the name of button that was pressed
     # it is used to process the action so i know what button human actually presses
     def getActionName(self):
-        if self.buttonWasClicked() == True:
+        if self.buttonWasClicked():
             for buttonName, button in self._buttons.items(): # loops over dict() k-v pairs
-                if button.wasClicked() == True:
+                if button.wasClicked():
                     return buttonName
                 
         return False # must always return something
 
     def drawAllButtons(self, isHumanTurn):
-        if isHumanTurn == True: # only draw the buttons if its the humans turn for added turn clarity.
+        if isHumanTurn: # only draw the buttons if its the humans turn for added turn clarity.
             for buttonName in self._buttons:
                 self._buttons[buttonName].drawButton() # accesses the the Button() object value in the dict
 

@@ -210,12 +210,15 @@ class GameController:
                     exit()
 
                 raiseInput = int(self._raiseField.handleEvents(event))
+
                 if raiseInput != False and raiseInput >= self._banker._minRaise: # raise from box.
                     if self._banker._minRaise <= raiseInput <= currentPlayer._bank:
                         self._raiseField.resetInput()
                         self.humanAction("raise", currentPlayer, raiseInput) # TODO: HANDLING OF THIS BOMBOCLAT SHIT
                         currentPlayer = self._activePlayers[self._currentPlayerTurn]
-
+                        raiseButton = self._buttons.getButtonObject("raise")
+                        raiseButton._active = True
+                    
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1: # if left click
                         # loops over all buttons to see if one was clicked
@@ -233,7 +236,7 @@ class GameController:
                                 self.humanAction(namedAction, currentPlayer, self._banker._minRaise)
                                 currentPlayer = self._activePlayers[self._currentPlayerTurn]
                                 self.isEarlyWin() # checks for early win
-
+                        
                         else:
                             raiseButton = self._buttons.getButtonObject("raise")
                             raiseButton._active = True
@@ -1285,17 +1288,18 @@ class Banker:
         return self._currentRoundBets.get(player, 0) > 0
 
     def setMinRaise(self):
-        self._minRaise = self._currentBet + self._lastRaise 
+        self._minRaise = self._callValue + self._lastRaise 
 
     def handleRaise(self, player, raiseAmount):
-        self._currentBet = raiseAmount if self._currentBet else self._callValue
         self._previousBet = self._currentBet
+        self._currentBet = raiseAmount if self._currentBet else self._callValue
         self._lastRaise = raiseAmount - self._previousBet
         
         self.processBet(player, raiseAmount)
         
-        self.setMinRaise()
+        
         self._callValue = self._currentBet
+        self.setMinRaise()
         print("minr", self._minRaise)
         self._raiseDebts[player] -= raiseAmount
         self.calculatePlayerDebts(player, raiseAmount)
@@ -1785,7 +1789,7 @@ class TextField(pygame.Rect):
                 self._text = self._text[:-1]
 
             elif event.key == pygame.K_RETURN:
-                self._active = False
+                # self._active = False
                 return self._text
 
             else:

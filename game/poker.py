@@ -114,6 +114,84 @@ AIs = ["human", "sharky", "rusher", "stackz", "sphinx", "richy"]
 screen = pygame.display.set_mode((screenWidth, screenHeight))
 
 
+class ScreenManager:
+    def __init__(self):
+        self._screens = []
+        self._currentScreen = 0
+    
+    def addScreen(self, screenObject):
+        self._screens.append(screenObject)
+    
+    def loadCurrentScreen(self):
+        self._screens[self._currentScreen].runScreen()
+    
+    def nextScreen(self):
+        self._currentScreen += 1
+    
+    def getCurrentScreenIndex(self):
+        return self._currentScreen
+        
+
+class Screen:
+    def __init__(self, action):
+        self._action = action
+    
+    def runScreen(self):
+        if self._action:
+            return self._action()
+    
+    def setAction(self, action):
+        self._action = action
+
+class GameScreen(Screen): 
+    def __init__(self, action):
+        super().__init__(action)
+
+
+class StartScreen(Screen):
+    def __init__(self, action, screenManager):
+        super().__init__(action)
+        self._screenManager = screenManager
+        self._buttons = ButtonManager({
+            "start": Button(screenWidth / 2, screenHeight - 200, actionButtonWidth, actionButtonHeight, self.incrementStack, "start", WHITE)
+        })
+        self._usernameField = TextField(screenWidth / 2, screenHeight - 500, actionButtonWidth, actionButtonHeight, "username")
+
+    def incrementStack(self):
+        self._screenManager.nextScreen()
+        self._screenManager.loadCurrentScreen()
+
+    def runScreen(self):
+        clock = pygame.time.Clock()
+        self._usernameField._active = True
+
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    exit()
+
+                usernameInput = self._usernameField.handleEvents(event)
+                self.validateUsername(usernameInput)
+
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1: # if left click
+                        # loops over all buttons to see if one was clicked
+                        if self._buttons.buttonWasClicked(): 
+                            self._buttons.executeNamedButton(self._buttons.getActionName())
+                        
+                        
+            self._usernameField._active = True                            
+            screen.fill(POKERGREEN)
+            self._buttons.drawAllButtons(True)
+            self._usernameField.drawTextInput()
+            pygame.display.update()
+            clock.tick(60)
+
+    def validateUsername(self, username):
+        return True # implement later    
+        
+
 class GameController:
     def __init__(self):
         self._players = [] # list of Player() sublasses [AI/HUMAN] objects
@@ -1930,5 +2008,10 @@ class ButtonManager:
                 return self._buttons[buttonName]
             
 
-game = GameController()
-game.gameLoop()
+screenManager = ScreenManager()
+startScreen = StartScreen(StartScreen.runScreen, screenManager)
+gameScreen = GameScreen(GameController().gameLoop)
+screenManager.addScreen(startScreen)
+screenManager.addScreen(gameScreen)
+
+screenManager.loadCurrentScreen()

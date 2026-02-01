@@ -5,7 +5,7 @@ import time
 pygame.init()
 pygame.font.init()
 
-infoFont = pygame.font.SysFont("consolas", 18)
+infoFont = pygame.font.SysFont("consolas", 19)
 infoFont.set_bold(True)
 
 fontConsolas = pygame.font.SysFont("Consolas", 35)
@@ -20,6 +20,8 @@ BLACK = (0, 0, 0) # used for button text
 LIGHT_BLACK = (200, 200, 200) # action name.
 HOVER_GREY = (190, 190, 190) # hovering over the button colour
 RED = (255, 140, 140) # TURN INDICATOR
+PLACEHOLDER_GREY = (150, 150, 150)
+SCARY_RED = (200, 20, 20)
 
 actionButtonWidth, actionButtonHeight = 120, 38
 # calculate the button x coordinate so that they are mathematically equally spaced across the screen
@@ -137,7 +139,7 @@ class GameController:
         }) # buttonManager takes the buttons as dictionary so it is easy to link to button
         # numbers not used since it would get confusing as which button i am refering to
 
-        self._raiseField = TextField(actionButtonX["raise"], actionbuttonY, actionButtonWidth, actionButtonHeight) # temp values except for the x and y
+        self._raiseField = TextField(actionButtonX["raise"], actionbuttonY, actionButtonWidth, actionButtonHeight, f"e.g: {self._banker._minRaise}") # temp values except for the x and y
 
         # this stores the games function calls after the preFlop is done
         # its needed to cleanly go through the function calls without a if, else bird's nest mess
@@ -212,12 +214,17 @@ class GameController:
                 raiseInput = int(self._raiseField.handleEvents(event))
 
                 if raiseInput != False and raiseInput >= self._banker._minRaise: # raise from box.
+                    
                     if self._banker._minRaise <= raiseInput <= currentPlayer._bank:
                         self._raiseField.resetInput()
                         self.humanAction("raise", currentPlayer, raiseInput) # TODO: HANDLING OF THIS BOMBOCLAT SHIT
                         currentPlayer = self._activePlayers[self._currentPlayerTurn]
                         raiseButton = self._buttons.getButtonObject("raise")
                         raiseButton._active = True
+                        self._raiseField.setDrawError(False)
+
+                elif raiseInput != False:
+                    self._raiseField.setDrawError(True)
                     
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1: # if left click
@@ -287,6 +294,9 @@ class GameController:
             self.drawPokerAssets()
             self._buttons.drawAllButtons(currentPlayer._isHuman and not currentPlayer._isAllIn) # buttons are only drawn if it is the player's turn.
             self.drawTurnIndicator(currentPlayer)
+
+            if self._raiseField._showError:
+                self.drawRaiseError()
 
             if self._showdownRunning and currentPlayer != self.lastPlayerInTurnOrder():
                 self.showdown()
@@ -412,6 +422,7 @@ class GameController:
                     self._showdownRunning = True
                 
             self._banker.handleRaise(player, raiseAmount)
+            self._raiseField.changePlaceholderText(f"e.g: {self._banker._minRaise}")
             
         elif action == "fold":
             self._activePlayers.remove(player)
@@ -943,6 +954,11 @@ class GameController:
                         return
 
             screen.blit(turnText, textRect)
+    
+    def drawRaiseError(self):
+        message = "min raise is " + str(self._banker._minRaise)
+        errorInfo = self._raiseField.getWrongResponse(True, message)
+        screen.blit(errorInfo[0], errorInfo[1])
 
     def drawPokerAssets(self):
         screen.fill(POKERGREEN) # background
@@ -1757,17 +1773,24 @@ class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
 
 
 class TextField(pygame.Rect):
-    def __init__(self, x, y, width, height, text=""):
+    def __init__(self, x, y, width, height, placeholder=""):
         super().__init__(x, y, width, height)
         self._active = False
         self._text = ""
         self._colour = WHITE
+        self._placeholder = placeholder
+        self._showError = False
 
     def drawTextInput(self):
         if self._active:
             pygame.draw.rect(screen, self._colour, self)
-            screen.blit(moneyFont.render(self._text, True, BLACK), (self.x, self.y)) 
 
+            if self._text: 
+                screen.blit(moneyFont.render(self._text, True, BLACK), (self.x + 5, self.y + 5)) 
+
+            elif not self._text:
+                screen.blit(moneyFont.render(str(self._placeholder), True, PLACEHOLDER_GREY), (self.x + 5, self.y + 5)) 
+                    
     def handleEvents(self, event):
         if event.type == pygame.QUIT:
             pygame.quit()
@@ -1796,9 +1819,28 @@ class TextField(pygame.Rect):
                 self._text += event.unicode
 
         return False
+
+    def getWrongResponse(self, aboveBox, errorMessage):
+        messageX = self.x
+        errorMessage = infoFont.render(errorMessage, True, SCARY_RED)
+        errorMessageRect = errorMessage.get_rect()
+
+        if aboveBox:
+            messageY = self.y - errorMessageRect.height
+
+        else: # below box
+            messageY = self.y + self.height + errorMessageRect.height
+        
+        return (errorMessage, (messageX, messageY))
     
+    def setDrawError(self, expression):
+        self._showError = expression
+        
     def resetInput(self):
         self._text = ""
+    
+    def changePlaceholderText(self, value):
+        self._placeholder = str(value)
 
 
 class ButtonManager:

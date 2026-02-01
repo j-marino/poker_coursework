@@ -193,7 +193,7 @@ class GameController:
         self._dealer.shuffle() # must shuffle at beggining of every game 
     
         # TODO: preFlop will have to consider the dealer button position, big and small blinds value and rotation.
-        self._dealer.setDealerButton(self._activePlayers)
+        self._dealer.initialDealerButton(self._activePlayers)
         self.setBlinds()
 
         self.drawPokerAssets()
@@ -455,11 +455,12 @@ class GameController:
 
     def shouldTriggerShowdown(self):
         nonAllInCount = self.getNumNonAllInPlayers()
-        return nonAllInCount <= 1 and not self._playersChecked and self.finishedBetting() or self.allPlayersAllIn()
+        if self.allPlayersAllIn():
+            return True
+        if nonAllInCount <= 1 and self.finishedBetting() and not self._playersChecked:
+            return True
+        return False
     
-    def nonFoldedHaveDebts(self):
-        currentRoundBets = self._banker._currentRoundBets
-
     def hasAllInPlayers(self):
         for player in self._activePlayers:
             if player._isAllIn:
@@ -508,6 +509,7 @@ class GameController:
             time.sleep(1)
             print(self._gameTurn)
         self.processRoundEnd()
+        self._showdownRunning = False # bug!
 
     def removeFromCheckList(self, player):
         if self._playersChecked and player in self._playersChecked:
@@ -531,18 +533,35 @@ class GameController:
                     waitingForInput = False
 
     def setBlinds(self):
-        dealerButtonIndex = self._players.index(self._dealer._dealerButton)
-        smallBlindIndex = dealerButtonIndex + 1
-        bigBlindIndex = dealerButtonIndex + 2
-        
-        smallBlindIndex, bigBlindIndex = self.validateBlindIndexes(smallBlindIndex, bigBlindIndex)
+        if len(self._activePlayers) == 2:
+            # In heads-up poker, the dealer is the small blind
+            # The dealer acts first pre-flop, but last post-flop
+            dealerIndex = self._dealer._dealerButtonIndex
+            smallBlindIndex = dealerIndex  # Dealer is small blind
+            bigBlindIndex = self.getNextIndex(dealerIndex, len(self._players))  # Other player is big blind
 
-        self._smallBlind = self._players[smallBlindIndex]
-        self._bigBlind = self._players[bigBlindIndex]
+            smallBlindIndex, bigBlindIndex = self.validateBlindIndexes(smallBlindIndex, bigBlindIndex)
 
-        self._currentPlayerTurn = bigBlindIndex + 1
-        if self._currentPlayerTurn == len(self._activePlayers):
-            self._currentPlayerTurn = 0
+            self._smallBlind = self._players[smallBlindIndex]
+            self._bigBlind = self._players[bigBlindIndex]
+
+            # Pre-flop, small blind (dealer) acts first
+            self._currentPlayerTurn = smallBlindIndex
+
+        else:
+            if self._dealer._dealerButton in self._players:
+                dealerButtonIndex = self._players.index(self._dealer._dealerButton)
+                smallBlindIndex = dealerButtonIndex + 1
+                bigBlindIndex = dealerButtonIndex + 2
+                
+                smallBlindIndex, bigBlindIndex = self.validateBlindIndexes(smallBlindIndex, bigBlindIndex)
+
+                self._smallBlind = self._players[smallBlindIndex]
+                self._bigBlind = self._players[bigBlindIndex]
+
+                self._currentPlayerTurn = bigBlindIndex + 1
+                if self._currentPlayerTurn == len(self._activePlayers):
+                    self._currentPlayerTurn = 0
 
     def validateBlindIndexes(self, smallBlindIndex, bigBlindIndex):
         if smallBlindIndex == len(self._players):
@@ -556,9 +575,11 @@ class GameController:
         return smallBlindIndex, bigBlindIndex
 
     def rotateDealerButton(self):
-        currentIndex = self._players.index(self._dealer._dealerButton)
-        nextIndex = self.getNextIndex(currentIndex, len(self._players))
-        self._dealer._dealerButton = self._players[nextIndex]
+        if self._dealer._dealerButton in self._players: # safety!
+            currentIndex = self._players.index(self._dealer._dealerButton)
+            nextIndex = self.getNextIndex(currentIndex, len(self._players))
+            self._dealer._dealerButton = self._players[nextIndex]
+            self._dealer._dealerButtonIndex = nextIndex
 
     
     def preFlop(self):
@@ -727,9 +748,10 @@ class GameController:
         for player in self._activePlayers:
             playerBet = currentRoundBets.get(player, 0) # if not in then -> 0
 
-            if playerBet < largestBet and not player._isAllIn:
-                return False
-        
+            if playerBet < largestBet:
+                if player not in self._playersChecked or largestBet > 0:
+                    return False
+                
         return True
         
     def removeFromGame(self, playersToBeRemoved):
@@ -855,6 +877,16 @@ class GameController:
             if player._isHuman:
                 bankTextX = handCardX[0]
                 bankTextY = handCardY + cardWidth + textRect.height * 2.5
+                screen.blit(bankText, (bankTextX, bankTextY))
+                
+                # if human is small or big blind
+                if self._gameTurn < 1:
+                    if player == self._smallBlind:
+                        blindLabel = infoFont.render("small blind £" + str(self._banker._smallBlindBet), True, WHITE)
+                        screen.blit(blindLabel, (handCardX[1], bankTextY))
+                    elif player == self._bigBlind:
+                        blindLabel = infoFont.render("big blind £" + str(self._banker._bigBlindBet), True, WHITE)
+                        screen.blit(blindLabel, (handCardX[1], bankTextY))
             else:
                 if player._name in AIs:
                     i = AIs.index(player._name)
@@ -862,6 +894,19 @@ class GameController:
                         bankTextX = AIPosX[i][0]
                         bankTextY = AIPosY[i] + cardWidth + textRect.height * 4
                         screen.blit(bankText, (bankTextX, bankTextY))
+                        
+                        # if AI is small or big blind and label to the right
+                        if self._gameTurn < 1:
+                            if player == self._smallBlind:
+                                blindLabel = infoFont.render("small blind £" + str(self._banker._smallBlindBet), True, WHITE)
+                                # pos to the right of the 2nd card
+                                blindLabelX = AIPosX[i][1]
+                                screen.blit(blindLabel, (blindLabelX, bankTextY))
+                            elif player == self._bigBlind:
+                                blindLabel = infoFont.render("big blind £" + str(self._banker._bigBlindBet), True, WHITE)
+                                # pos to the right of the 2nd card
+                                blindLabelX = AIPosX[i][1]
+                                screen.blit(blindLabel, (blindLabelX, bankTextY))
                     continue
                 else:
                     continue
@@ -881,31 +926,32 @@ class GameController:
 
     def drawActionValue(self):    
         for player in self._activePlayers:
-            if player == self._smallBlind or player == self._bigBlind and self._gameTurn < 1:  # dont show value for current player or blinds during preflop
-                continue # fix later
-
             if not player._isHuman and player in self._banker._currentRoundBets:
-                if player._actionName != "fold" and player._actionName != "check": # old bug no actionName
-                     pos = self.getAIPosition(player)
-                     if pos:
+                if player._actionName not in ["fold", "check", ""]:
+                    pos = self.getAIPosition(player)
+                    if pos:
                         x_coords, y_coord, index = pos
-                        moneyText = str(self._banker._currentRoundBets[player])
-                        moneyText = fontVerdana.render(moneyText, True, LIGHT_BLACK) 
-                        screen.blit(moneyText, (x_coords[1] + 80, y_coord + cardHeight))
+                        totalBet = self._banker._currentRoundBets[player]
+                        moneyText = fontVerdana.render(str(totalBet), True, LIGHT_BLACK)
+                        
+                        textX = x_coords[1] + 80
+                        textY = y_coord + cardHeight
+                        screen.blit(moneyText, (textX, textY))
     
     def drawDealerButton(self):
         dealerButtonPlayer = self._dealer._dealerButton
 
-        if dealerButtonPlayer._isHuman:
-            dealerButtonX = handCardX[0]
-            dealerButtonY = handCardY + cardHeight - dealerButtonHeight
+        if dealerButtonPlayer in self._players: # validation
+            if dealerButtonPlayer._isHuman:
+                dealerButtonX = handCardX[0]
+                dealerButtonY = handCardY + cardHeight - dealerButtonHeight
 
-        else:
-            pos = self.getAIPosition(dealerButtonPlayer)
-            dealerButtonX = pos[0][0]
-            dealerButtonY = pos[1] + cardHeight - dealerButtonHeight
-    
-        screen.blit(dealerButton, (dealerButtonX, dealerButtonY))
+            else:
+                pos = self.getAIPosition(dealerButtonPlayer)
+                dealerButtonX = pos[0][0]
+                dealerButtonY = pos[1] + cardHeight - dealerButtonHeight
+        
+            screen.blit(dealerButton, (dealerButtonX, dealerButtonY))
     
     def drawGameInfo(self):
         # key game information in the top right corner
@@ -1193,8 +1239,10 @@ class GameController:
         self._activePlayers = self._players[:]
         self._playersChecked = []
         self._availableActions = ["call", "fold", "raise"] # used for validation of moves.
-        self._banker._callValue = 20
-        self._banker._previousBet, self._banker._currentBet = 10, 20
+        self._banker._callValue = self._banker._bigBlindBet # old bug!
+        self._banker._previousBet, self._banker._smallBlindBet 
+        self._banker._currentBet = self._banker._bigBlindBet
+        self._banker.resetCurrentRoundBets() # bug!!!!!!
         self._banker.activePlayerToDebtList(self._activePlayers)
         self._showdownRunning = False
         self._isEarlyWin = False
@@ -1216,6 +1264,7 @@ class Dealer:
     def __init__(self):
         self._deck = Deck().createDeck() # list of 52 Card objects, in order
         self._dealerButton = None
+        self._dealerButtonIndex = 0
 
     def dealCard(self):
         if len(self._deck) > 1:
@@ -1255,19 +1304,20 @@ class Dealer:
     def recreateDeck(self):
         self._deck = Deck().createDeck()
     
-    def setDealerButton(self, players):
+    def initialDealerButton(self, players):
         pickedPlayer = random.choice(players)
         self._dealerButton = pickedPlayer
+        self._dealerButtonIndex = players.index(pickedPlayer)
 
 
 class Banker:
     def __init__(self):
         self._fundedPlayers = []
         self._pot = 0
-        self._smallBlindBet = 10
+        self._smallBlindBet = 500
         self._bigBlindBet = self._smallBlindBet * 2
-        self._previousBet = self._smallBlindBet # determined on blinds later.
-        self._currentBet = self._bigBlindBet # will change!!!
+        self._previousBet = self._smallBlindBet 
+        self._currentBet = self._bigBlindBet 
         self._minRaise = (self._currentBet - self._previousBet) + self._currentBet
         self._callValue = self._bigBlindBet
         self._lastRaise = 0

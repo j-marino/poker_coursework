@@ -116,17 +116,17 @@ screen = pygame.display.set_mode((screenWidth, screenHeight))
 
 class ScreenManager:
     def __init__(self):
-        self._screens = []
-        self._currentScreen = 0
+        self._screens = [] # keep a "stack" of screens. menu -> gamescreen
+        self._currentScreen = 0 # start at 0
     
     def addScreen(self, screenObject):
         self._screens.append(screenObject)
     
     def loadCurrentScreen(self):
-        self._screens[self._currentScreen].runScreen()
+        self._screens[self._currentScreen].runScreen() # runs the current screen.
     
     def nextScreen(self):
-        self._currentScreen += 1
+        self._currentScreen += 1 # increment the stack
     
     def getCurrentScreenIndex(self):
         return self._currentScreen
@@ -137,14 +137,14 @@ class Screen:
         self._action = action
     
     def runScreen(self):
-        if self._action:
+        if self._action: # stops from running invalid actions. (None type)
             return self._action()
     
     def setAction(self, action):
         self._action = action
 
 class GameScreen(Screen): 
-    def __init__(self, action):
+    def __init__(self, action): # action will be the GameController's gameloop.
         super().__init__(action)
 
 
@@ -157,13 +157,14 @@ class StartScreen(Screen):
         })
         self._usernameField = TextField(screenWidth / 2, screenHeight - 500, actionButtonWidth, actionButtonHeight, "username")
 
+    # goes to the next screen in the assigned stack.
     def incrementStack(self):
-        self._screenManager.nextScreen()
+        self._screenManager.nextScreen() 
         self._screenManager.loadCurrentScreen()
 
     def runScreen(self):
         clock = pygame.time.Clock()
-        self._usernameField._active = True
+        self._usernameField._active = True # set the field to active so it is drawn.
 
         while True:
             for event in pygame.event.get():
@@ -171,8 +172,8 @@ class StartScreen(Screen):
                     pygame.quit()
                     exit()
 
-                usernameInput = self._usernameField.handleEvents(event)
-                self.validateUsername(usernameInput)
+                usernameInput = self._usernameField.handleEvents(event) # handles enter, del, inputs.
+                self.validateUsername(usernameInput) # username must be within a range of characters.
 
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1: # if left click
@@ -181,7 +182,7 @@ class StartScreen(Screen):
                             self._buttons.executeNamedButton(self._buttons.getActionName())
                         
                         
-            self._usernameField._active = True                            
+            self._usernameField._active = True # field must have persistence so it is continually drawn.                     
             screen.fill(POKERGREEN)
             self._buttons.drawAllButtons(True)
             self._usernameField.drawTextInput()
@@ -433,10 +434,10 @@ class GameController:
         
         else:
             # math is same as human just different indexing for the AI dicts.
-            playerIndex = self.getPlayerDisplayIndex(winner)
-            if playerIndex is not None: # make sure the playerIndex is valid
-                textRect.x = AIPosX[playerIndex][1] - 0.5 * handCardXGap - textRect.width * 0.5
-                textRect.y = AIPosY[playerIndex] - textRect.height - heightSpacer
+            aiIndex = self.getPlayerDisplayIndex(winner)
+            if aiIndex is not None: # make sure the aiIndex is valid
+                textRect.x = AIPosX[aiIndex][1] - 0.5 * handCardXGap - textRect.width * 0.5
+                textRect.y = AIPosY[aiIndex] - textRect.height - heightSpacer
 
         screen.blit(winnerText, textRect) # bosh! put it on the screen
 
@@ -482,13 +483,7 @@ class GameController:
             self._raiseHappened = True
             self._raiser = player
             self.removeFromCheckList(player) # if player previously checked get them out of the list now
-
-            if self.playerIsGoingAllIn(player, raiseAmount): # all in when the raise is == to your bank
-                self.setPlayerAllIn(player)
-
-                if self.shouldTriggerShowdown(): # if all players all in and betting finished then showdown! fun!
-                    self._showdownRunning = True # flag for the showdown to start, cannot start here otherwise screen will not update most recent player move.
-                
+            self.allInHandling(player, raiseAmount) # happens before the money is taken, or calculated wrong,               
             self._banker.handleRaise(player, raiseAmount)
             self._raiseField.changePlaceholderText(f"e.g: {self._banker._minRaise}") # usability design, show what the min value is.
             
@@ -510,12 +505,7 @@ class GameController:
         
         elif action == "call":
             self.removeFromCheckList(player) # if player previously checked get them out of the list now
-            if self.playerIsGoingAllIn(player, self._banker._callValue): # calls can trigger all ins so must check
-                self.setPlayerAllIn(player)
-
-                if self.shouldTriggerShowdown():
-                    self._showdownRunning = True
-            
+            self.allInHandling(player, self._banker._callValue)
             self._banker.handleCall(player) # handles debts too
 
         elif action == "check": # check = "skip my turn"
@@ -730,25 +720,21 @@ class GameController:
         # commence next game
         self.waitForInput()
         self.reset() # reset all flags, debts etc. for the new game start.
-        
         self.rotateDealerButton() # + 1 to dealer button
         self.setBlinds() # blinds set at start of game.
         self._banker.takeBlindMoney(self._smallBlind, self._smallBlind, self._bigBlind)
-
-        if self.playerIsGoingAllIn(self._smallBlind, self._banker._smallBlindBet):
-                self.setPlayerAllIn(self._smallBlind)
-                if self.shouldTriggerShowdown():
-                    self._showdownRunning = True
-
-        # TODO: OMGG PLEASE SHORTEN AND OPTIMISE THISSSSSSSSSSSSSSS YOU CHIMP!!!!!!!!!!!!!!!!!!!!!!!!
+        self.allInHandling(self._smallBlind, self._banker._smallBlindBet)
         self._banker.takeBlindMoney(self._bigBlind, self._smallBlind, self._bigBlind)
-        if self.playerIsGoingAllIn(self._bigBlind, self._banker._bigBlindBet):
-                self.setPlayerAllIn(self._bigBlind)
-                if self.shouldTriggerShowdown():
-                    self._showdownRunning = True
+        self.allInHandling(self._bigBlind, self._banker._bigBlindBet)
         
         pygame.display.update()
         self.preFlop()
+    
+    def allInHandling(self, player, bet):
+        if self.playerIsGoingAllIn(player, bet):
+            self.setPlayerAllIn(player)
+            if self.shouldTriggerShowdown():
+                self._showdownRunning = True
 
     def checkGameOver(self):
         # human has run outta money
@@ -973,26 +959,24 @@ class GameController:
                         blindLabel = infoFont.render("big blind £" + str(self._banker._bigBlindBet), True, WHITE)
                         screen.blit(blindLabel, (handCardX[1], bankTextY))
             else:
-                if player._name in AIs:
+                if player._name in AIs: # validate, only draw if in list
                     i = AIs.index(player._name)
 
                     if i in AIPosX and i in AIPosY:
-                        bankTextX = AIPosX[i][0]
-                        bankTextY = AIPosY[i] + cardWidth + textRect.height * 4
+                        bankTextX = AIPosX[i][0] # left most hand card.
+                        bankTextY = AIPosY[i] + cardWidth + textRect.height * 4 # * 4 is a spacer for the height
                         screen.blit(bankText, (bankTextX, bankTextY))
                         
                         # if AI is small or big blind and label to the right
                         if self._gameTurn < 1:
                             if player == self._smallBlind:
                                 blindLabel = infoFont.render("small blind £" + str(self._banker._smallBlindBet), True, WHITE)
-                                # pos to the right of the 2nd hand card
-                                blindLabelX = AIPosX[i][1]
+                                blindLabelX = AIPosX[i][1] # pos to the right of the 2nd hand card
                                 screen.blit(blindLabel, (blindLabelX, bankTextY))
 
                             elif player == self._bigBlind:
                                 blindLabel = infoFont.render("big blind £" + str(self._banker._bigBlindBet), True, WHITE)
-                                # pos to the right of the 2nd hand card
-                                blindLabelX = AIPosX[i][1]
+                                blindLabelX = AIPosX[i][1] # pos to the right of the 2nd hand card
                                 screen.blit(blindLabel, (blindLabelX, bankTextY))
                     continue
                 else:
@@ -1089,12 +1073,13 @@ class GameController:
             elif not currentPlayer._isHuman:
                 # math is same as human just different indexing for the AI dicts.
                 if currentPlayer._name in AIs:
-                    playerIndex = AIs.index(currentPlayer._name)
-                    if playerIndex in AIPosX and playerIndex in AIPosY:
-                        textRect.x = AIPosX[playerIndex][1] - 0.5 * handCardXGap - textRect.width * 0.5
-                        textRect.y = AIPosY[playerIndex] - textRect.height - heightSpacer
+                    aiIndex = AIs.index(currentPlayer._name)
+
+                    if aiIndex in AIPosX and aiIndex in AIPosY: # make sure index in coords
+                        # mathematically calcualte the middle of the hand cards.
+                        textRect.x = AIPosX[aiIndex][1] - 0.5 * handCardXGap - textRect.width * 0.5
+                        textRect.y = AIPosY[aiIndex] - textRect.height - heightSpacer
                         screen.blit(turnText, textRect)
-                        return
 
             screen.blit(turnText, textRect)
     
@@ -1336,11 +1321,12 @@ class GameController:
         self._playersChecked = []
         self._availableActions = ["call", "fold", "raise"] # used for validation of moves. -> no check since you cannot check at the start of game!!
         self._banker._callValue = self._banker._bigBlindBet # call value is based dynamically off the big blind
-        self._banker._previousBet, self._banker._smallBlindBet # for calc of minraise
+        self._banker._previousBet = self._banker._smallBlindBet # for calc of minraise
         self._banker._currentBet = self._banker._bigBlindBet # for calc of minraise
+        self._banker._minRaise = (self._banker._currentBet - self._banker._previousBet) + self._banker._currentBet 
         self._banker.resetCurrentRoundBets() # NO BETS at the begginig of game
         self._banker.resetDebtList(self._activePlayers) # no debts either
-        self._showdownRunning = False 
+        self._showdownRunning = False # showdown not running
 
         for player in self._players:
             player._isAllIn = False # no one is all in on reset, can be changed if a blind causes player to go all in though
@@ -1350,7 +1336,8 @@ class GameController:
             player._hand = []  
             player._evaluatedHand = ""  
             player._isFolded = False  
-            if not player._isHuman:
+
+            if not player._isHuman: # handle the AI's
                 player._action = ""
                 player._actionName = ""
 
@@ -1633,17 +1620,12 @@ class Player:
     def addToGame(self, playerList):
         playerList.append(self)
     
-    # TODO: prototype 3 feature, given temp values and simplified so that the AI can work with it and function
+    # all methods here are inherited and rewritten by the AI for their functionality.
     def raisePot(self):
-        print("raising by 1000")
+        pass
 
-    # TODO: add amounts to both the raise and the call methods.
     def call(self):
-        print("calling")
-
-    def allIn(self):
-        print("ALL IN BABY") # temp for AI, this is just a raise equal to your bank account though
-
+        pass
 
 class AIPlayer(Player):
     def __init__(self, name="monte"): # default name but all AI's are given a name
@@ -1868,17 +1850,19 @@ class AIPlayer(Player):
             self._actionName = "fold"
             return
     
+    # determine the amount to raise to.
     def raiseQuant(self, callValue, minRaise):
-        roll = random.random() * 5
-        self._raiseAmount = callValue * (self._aggressiveness + self._confidence + roll)
-        if self._raiseAmount < minRaise:
-            self._raiseAmount = minRaise
+        roll = random.random() * 5 # randomness for how much to raise by
+        self._raiseAmount = callValue * (self._aggressiveness + self._confidence + roll) # calculate based off previous attributes and random roll
+        if self._raiseAmount < minRaise: # but if you so happen to raise by a small amount (low confidence and low aggression)
+            self._raiseAmount = minRaise # validate to the min amount.
 
         return int(self.normaliseRaise(self._raiseAmount, minRaise))
 
+    # make sure raise is within the boundaries of the player's bank and minimum raise. 
     def normaliseRaise(self, raiseAmount, minRaise):
         if raiseAmount > self._bank or minRaise > self._bank:
-            self._raiseAmount = self._bank
+            self._raiseAmount = self._bank # if you raise more than your bank, set raise to be your bank instead
 
         return self._raiseAmount
 
@@ -1923,22 +1907,23 @@ class Button(pygame.Rect): # uses the pre-made Rect class from pygame library
 
 
 class TextField(pygame.Rect):
-    def __init__(self, x, y, width, height, placeholder=""):
+    def __init__(self, x, y, width, height, placeholder=""): # default no placeholder
         super().__init__(x, y, width, height)
-        self._active = False
+        self._active = False # not active on default.
         self._text = ""
         self._colour = WHITE
         self._placeholder = placeholder
         self._showError = False
 
+    # draws the key presses (num or letter) than you input
     def drawTextInput(self):
         if self._active:
-            pygame.draw.rect(screen, self._colour, self)
+            pygame.draw.rect(screen, self._colour, self) # draw box first.
 
-            if self._text: 
+            if self._text: # if there is text you have entered
                 screen.blit(moneyFont.render(self._text, True, BLACK), (self.x + 5, self.y + 5)) 
 
-            elif not self._text:
+            elif not self._text: # draw place holder instead if there is no text inputted
                 screen.blit(moneyFont.render(str(self._placeholder), True, PLACEHOLDER_GREY), (self.x + 5, self.y + 5)) 
                     
     def handleEvents(self, event):
@@ -1946,51 +1931,47 @@ class TextField(pygame.Rect):
             pygame.quit()
 
         if event.type == pygame.MOUSEBUTTONDOWN:
-            
+            # clicking on the text field makes it active, so any keyboard press when its active will start typing.
             if self.collidepoint(pygame.mouse.get_pos()):
                 self._active = True
+
             else:
-                self._active = False
-                self._text = ""
+                self._active = False # stop taking characters to add to text.
+                self._text = "" # reset the field.
 
         if event.type == pygame.KEYDOWN and self._active:
-
-            # delete
-            if event.key == pygame.K_BACKSPACE:
-
-                # remove the last one
-                self._text = self._text[:-1]
+            if event.key == pygame.K_BACKSPACE: # handle deleting
+                self._text = self._text[:-1] # slice up to last num, so last num is removed
 
             elif event.key == pygame.K_RETURN:
-                # self._active = False
-                return self._text
+                return self._text # send text through on enter
 
             else:
-                self._text += event.unicode
+                self._text += event.unicode # unicode normalises your input.
 
         return False
 
     def getWrongResponse(self, aboveBox, errorMessage):
-        messageX = self.x
+        messageX = self.x # positioning
         errorMessage = infoFont.render(errorMessage, True, SCARY_RED)
         errorMessageRect = errorMessage.get_rect()
 
-        if aboveBox:
+        if aboveBox: # draw the error above the box
             messageY = self.y - errorMessageRect.height
 
         else: # below box
             messageY = self.y + self.height + errorMessageRect.height
         
-        return (errorMessage, (messageX, messageY))
+        return (errorMessage, (messageX, messageY)) # tuple of coords included.
     
     def setDrawError(self, expression):
-        self._showError = expression
+        self._showError = expression # control when the error is drawn.
         
     def resetInput(self):
         self._text = ""
     
     def changePlaceholderText(self, value):
-        self._placeholder = str(value)
+        self._placeholder = str(value) # in raise field the placeholder changes to the min raise.
 
 
 class ButtonManager:

@@ -648,6 +648,11 @@ class GameController:
             nextIndex = self.getNextIndex(currentIndex, len(self._players)) # gets next VALID index
             self._dealer._dealerButton = self._players[nextIndex]
             self._dealer._dealerButtonIndex = nextIndex
+        else: # set dealer button next
+            currentIndex = self._dealer._dealerButtonIndex
+            nextIndex = self.getNextIndex(currentIndex, len(self._players)) # gets next VALID index
+            self._dealer._dealerButton = self._players[nextIndex]
+            self._dealer._dealerButtonIndex = nextIndex
 
     def preFlop(self):
         # deals each player their hand -> then gives the cards their coordinates on the screen

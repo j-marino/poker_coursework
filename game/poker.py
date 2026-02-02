@@ -218,7 +218,7 @@ class GameController:
         }) # buttonManager takes the buttons as dictionary so it is easy to link to button
         # numbers not used since it would get confusing as which button i am refering to
 
-        self._raiseField = TextField(actionButtonX["raise"], actionbuttonY, actionButtonWidth, actionButtonHeight, f"e.g: {self._banker._minRaise}") # temp values except for the x and y
+        self._raiseField = TextField(actionButtonX["raise"], actionbuttonY, actionButtonWidth, actionButtonHeight, f"min {self._banker._minRaise}") # temp values except for the x and y
 
         # this stores the games function calls after the preFlop is done
         # its needed to cleanly go through the function calls without a if, else bird's nest mess
@@ -358,8 +358,7 @@ class GameController:
                                 pass
                             
                         if self.roundEnded(currentPlayer):
-                            self.drawActionNames() # action e.g. call
-                            self.drawActionValue() # value of action -> raise "20"
+                            self.drawPokerAssets()
                             pygame.display.update()
                             pygame.time.wait(1000)  # wait 1s so you can digest what happened
                             self.resetRound()
@@ -485,9 +484,11 @@ class GameController:
             self.removeFromCheckList(player) # if player previously checked get them out of the list now
             self.allInHandling(player, raiseAmount) # happens before the money is taken, or calculated wrong,               
             self._banker.handleRaise(player, raiseAmount)
-            self._raiseField.changePlaceholderText(f"e.g: {self._banker._minRaise}") # usability design, show what the min value is.
+            self._raiseField.changePlaceholderText(f"min {self._banker._minRaise}") # usability design, show what the min value is.
             
         elif action == "fold":
+            self.removeFromCheckList(player)  # remove from check list
+            player.fold()  # set ._isFolded flag
             self._activePlayers.remove(player)
             self._currentPlayerTurn -= 1 # MUST minus one from this since it is incremented by 1 on every valid turn, including fold.
             # but removing a player and then incrementing would skip the next player so to negate this we -1
@@ -814,6 +815,9 @@ class GameController:
 
         for player in self._activePlayers:
             playerBet = currentRoundBets.get(player, 0) # if not in then -> 0
+
+            if player._isAllIn:
+                continue # skip all-in players becoz they can't bet anymore
 
             if playerBet < largestBet: # accounts for checked players to keep playing since they have debts to pay still
                 if player not in self._playersChecked or largestBet > 0:

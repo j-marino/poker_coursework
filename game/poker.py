@@ -103,10 +103,10 @@ AIPosY = {
 # for future feature implementation of balance
 AINames = { 
     1: "sharky",
-    # 2: "rusher",
-    # 3: "stackz",
-    # 4: "sphinx",
-    # 5: "richy"
+    2: "rusher",
+    3: "stackz",
+    4: "sphinx",
+    5: "richy"
 }
 
 AIs = ["human", "sharky", "rusher", "stackz", "sphinx", "richy"]

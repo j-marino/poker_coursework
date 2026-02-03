@@ -103,10 +103,10 @@ AIPosY = {
 # for future feature implementation of balance
 AINames = { 
     1: "sharky",
-    2: "rusher",
-    3: "stackz",
-    4: "sphinx",
-    5: "richy"
+    # 2: "rusher",
+    # 3: "stackz",
+    # 4: "sphinx",
+    # 5: "richy"
 }
 
 AIs = ["human", "sharky", "rusher", "stackz", "sphinx", "richy"]
@@ -259,6 +259,7 @@ class GameController:
         self._lastPlayer = None
         self._smallBlind = None # blinds to be decided based off dealer button position.
         self._bigBlind = None
+        self._roundsPassed = 0 
 
     def gameLoop(self):
         for nameIndex in AINames.keys():
@@ -416,7 +417,7 @@ class GameController:
             self._raiseHappened = False
             self._banker.resetDebtList(self._activePlayers) # set debts to 0
             self._banker.resetCurrentRoundBets() # no one has put any money on new round so set to 0.
-    
+
     def resetRound(self):
         self._roundCycleFinished = True # changes flag to show that we can move onto the next gameTurn if no raise happened.
         self.resetAIActionNames() # to stop drawing the AI actions since they're going to be changed
@@ -719,13 +720,14 @@ class GameController:
             self.removeFromGame(brokePlayers)
             
             # game over!!!
-            if self.checkGameOver():
+            if self.checkGameOver(brokePlayers):
                 return  # hahaaah
 
         # commence next game
         self.waitForInput()
         self.reset() # reset all flags, debts etc. for the new game start.
         self.rotateDealerButton() # + 1 to dealer button
+        self._banker.increaseBlindBet(self._roundsPassed)
         self.setBlinds() # blinds set at start of game.
         self._banker.takeBlindMoney(self._smallBlind, self._smallBlind, self._bigBlind)
         self.allInHandling(self._smallBlind, self._banker._smallBlindBet)
@@ -741,42 +743,41 @@ class GameController:
             if self.shouldTriggerShowdown():
                 self._showdownRunning = True
 
-    def checkGameOver(self):
+    def checkGameOver(self, brokePlayers):
         # human has run outta money
-        humanPlayer = self._players[0]
-        if humanPlayer._bank <= 0:
-            print("GAME OVER - You're out of money!")
-            self.displayGameOverScreen(False)
-            return True
+        humanPlayer = [p for p in brokePlayers if p._isHuman]
+        if humanPlayer: # if the player to remove is the human
+            humanPlayer = humanPlayer[0]
+
+            if humanPlayer._bank <= 0:
+                self.displayGameOverScreen(won=False) # show the appropriate lose message
         
         # count how many people have money left if the human has money still
         playersWithMoney = [p for p in self._players if p._bank > 0]
         if len(playersWithMoney) == 1:
-            print("AIs SMASHED GG EZ")
-            self.displayGameOverScreen(True)
-            return True
-        
-        return False
+            self.displayGameOverScreen(won=True)
 
     def displayGameOverScreen(self, won):
         screen.fill(POKERGREEN)
         
         if won:
-            message = "CONGRATULATIONS! YOU WON!"
-            subMessage = "All opponents eliminated"
+            message = "CONGRATULATIONS! YOU WON"
+            subMessage = "AI SCRUBS SMASED GG EZ"
         else:
             message = "GAME OVER"
-            subMessage = "You ran out of money"
+            subMessage = "YOU SUCK"
         
+        # win message
         mainText = fontConsolas.render(message, True, WHITE)
         mainRect = mainText.get_rect(center=(screenWidth // 2, screenHeight // 2 - 50))
         screen.blit(mainText, mainRect)
         
+        # render text underneth win message
         subText = fontVerdana.render(subMessage, True, LIGHT_BLACK)
         subRect = subText.get_rect(center=(screenWidth // 2, screenHeight // 2 + 10))
         screen.blit(subText, subRect)
         
-        # CHANGE LATER TO RETRY AND CONTINUE
+        # tell user how to exit game
         continueText = turnIndicatorFont.render("click to exit", True, WHITE)
         continueRect = continueText.get_rect(center=(screenWidth // 2, screenHeight // 2 + 70))
         screen.blit(continueText, continueRect)
@@ -880,6 +881,7 @@ class GameController:
 
     def startNextRound(self):
         self._gameTurn += 1
+        self._roundsPassed += 1
         self.gameTurnState[self._gameTurn]()
 
         # reset the available actions, allowing players to check again.
@@ -1292,23 +1294,6 @@ class GameController:
         # for: prototype 3
         return winner
     
-    def handlePrematureWin(self):
-        # restructure this logic, used again in postriver
-        self._banker.givePotToWinner(self._activePlayers[0])
-        self.drawWinnerText(self._activePlayers[0])
-        pygame.display.update()
-
-        # Check for game over before continuing
-        brokePlayers = self._banker.getNoMoneyPlayers(self._players)
-        if brokePlayers:
-            self.removeFromGame(brokePlayers)
-            if self.checkGameOver():
-                return
-
-        self.waitForInput()
-        self.reset()
-        pygame.display.update()
-        self.preFlop()
 
     # all flags must be reset
     # deck must be shuffled and reset
@@ -1550,6 +1535,14 @@ class Banker:
 
         debtPaid = blind._bank if self.betGreaterThanBank(bet, blind._bank) else bet
         self.processBet(blind, debtPaid)
+    
+    def increaseBlindBet(self, roundsPassed):
+        self._smallBlindBet = int(self._smallBlindBet * 1.5) if roundsPassed % 3 == 0 else self._smallBlindBet # increase off rounds played
+        self._bigBlindBet = self._smallBlindBet * 2 # bi blind is small blind doubled always.
+        self._previousBet = self._smallBlindBet # set history for proper calculating or min raise 
+        self._currentBet = self._bigBlindBet 
+
+
 
 class Card:
     def __init__(self, value, suit, loadImage=True):
@@ -1929,7 +1922,7 @@ class TextField(pygame.Rect):
                 screen.blit(moneyFont.render(self._text, True, BLACK), (self.x + 5, self.y + 5)) 
 
             elif not self._text: # draw place holder instead if there is no text inputted
-                screen.blit(moneyFont.render(str(self._placeholder), True, PLACEHOLDER_GREY), (self.x + 5, self.y + 5)) 
+                screen.blit(infoFont.render(str(self._placeholder), True, PLACEHOLDER_GREY), (self.x + 5, self.y + 5)) 
                     
     def handleEvents(self, event):
         if event.type == pygame.QUIT:

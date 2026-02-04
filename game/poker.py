@@ -762,7 +762,7 @@ class GameController:
         
         if won:
             message = "CONGRATULATIONS! YOU WON"
-            subMessage = "AI SCRUBS SMASED GG EZ"
+            subMessage = "AI SCRUBS SMASHED GG EZ"
         else:
             message = "GAME OVER"
             subMessage = "YOU SUCK"

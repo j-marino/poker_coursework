@@ -283,7 +283,7 @@ class GameController:
         clock = pygame.time.Clock()
      
         while True:
-            if self._currentPlayerTurn >= len(self._activePlayers): # MUST MUST MUST validate this, or loads of errors, it is a circular list.
+            if self._currentPlayerTurn >= len(self._activePlayers): # MUST validate this, or index and logical errors, must behave as circular list.
                 self._currentPlayerTurn = 0 # set to 0 if past the active players.
 
             currentPlayer = self._activePlayers[self._currentPlayerTurn] # this variable used for checks and validation this persons turn.
@@ -490,6 +490,13 @@ class GameController:
             self.removeFromCheckList(player)  # remove from check list
             player.fold()  # set ._isFolded flag
             self._activePlayers.remove(player)
+            if len(self._activePlayers) == 1: # premature win
+                self.drawPokerAssets() # draw updates to screen
+                pygame.display.update()
+                pygame.time.wait(1000)  # time to see the fold and digest the info
+                self.postRiver() # end the game
+                return
+            
             self._currentPlayerTurn -= 1 # MUST minus one from this since it is incremented by 1 on every valid turn, including fold.
             # but removing a player and then incrementing would skip the next player so to negate this we -1
 
@@ -615,6 +622,7 @@ class GameController:
 
             # pre-flop, small blind (dealer) acts first
             self._currentPlayerTurn = smallBlindIndex
+            self._lastPlayer = self._bigBlind
 
         else: # normal case, > 2 players
             if self._dealer._dealerButton in self._players:
@@ -630,6 +638,8 @@ class GameController:
                 self._currentPlayerTurn = bigBlindIndex + 1 # first player to manually act is one clockwise after the big blind.
                 if self._currentPlayerTurn == len(self._activePlayers): # make sure index isnt out of range ever.
                     self._currentPlayerTurn = 0
+                
+                self._lastPlayer = self._bigBlind
 
     def validateBlindIndexes(self, smallBlindIndex, bigBlindIndex):
         if smallBlindIndex == len(self._players): # this would be invalid if true
@@ -733,8 +743,8 @@ class GameController:
         self._banker.takeBlindMoney(self._bigBlind, self._smallBlind, self._bigBlind)
         self.allInHandling(self._bigBlind, self._banker._bigBlindBet)
         
-        pygame.display.update()
         self.preFlop()
+        pygame.display.update()
     
     def allInHandling(self, player, bet):
         if self.playerIsGoingAllIn(player, bet):
@@ -742,45 +752,46 @@ class GameController:
             if self.shouldTriggerShowdown():
                 self._showdownRunning = True
 
-    def checkGameOver(self):
+    def checkGameOver(self, brokePlayers):
         # human has run outta money
-        humanPlayer = self._players[0]
-        if humanPlayer._bank <= 0:
-            print("GAME OVER - You're out of money!")
-            self.displayGameOverScreen(False)
-            return True
+        for player in brokePlayers:
+            if player._isHuman:
+                self.displayGameOverScreen(False) # win = false
+                return True # signals that the game is over
         
-        # count how many people have money left if the human has money still
+        # count how many people have money left and since its past the human check for the no money players if there is only 1 player left, which means 
+        # they are human they have won!
         playersWithMoney = [p for p in self._players if p._bank > 0]
         if len(playersWithMoney) == 1:
-            print("AIs SMASHED GG EZ")
-            self.displayGameOverScreen(True)
-            return True
+            self.displayGameOverScreen(True) # win = true
+            return True # signals that the game is over
         
-        return False
+        return False # signals game is not over.
 
     def displayGameOverScreen(self, won):
-        screen.fill(POKERGREEN)
+        screen.fill(POKERGREEN) # back ground
         
         if won:
-            message = "CONGRATULATIONS! YOU WON!"
-            subMessage = "All opponents eliminated"
+            message = "CONGRATULATIONS! YOU WON!" 
+            subMessage = "AI SCRUBZ SMASHED! GG EZ"
+
         else:
             message = "GAME OVER"
-            subMessage = "You ran out of money"
+            subMessage = "YOU SUCK! AGI ALREADY?"
         
+        # render the big win or lose text
         mainText = fontConsolas.render(message, True, WHITE)
         mainRect = mainText.get_rect(center=(screenWidth // 2, screenHeight // 2 - 50))
         screen.blit(mainText, mainRect)
         
+        # render the smaller win or lose text sub message
         subText = fontVerdana.render(subMessage, True, LIGHT_BLACK)
         subRect = subText.get_rect(center=(screenWidth // 2, screenHeight // 2 + 10))
         screen.blit(subText, subRect)
         
-        # CHANGE LATER TO RETRY AND CONTINUE
-        continueText = turnIndicatorFont.render("click to exit", True, WHITE)
-        continueRect = continueText.get_rect(center=(screenWidth // 2, screenHeight // 2 + 70))
-        screen.blit(continueText, continueRect)
+        exitText = turnIndicatorFont.render("click to exit", True, WHITE)
+        exitTextRect = exitText.get_rect(center=(screenWidth // 2, screenHeight // 2 + 70)) # centre mathematically
+        screen.blit(exitText, exitTextRect)
         
         pygame.display.update()
         

@@ -218,7 +218,7 @@ class GameController:
         }) # buttonManager takes the buttons as dictionary so it is easy to link to button
         # numbers not used since it would get confusing as which button i am refering to
 
-        self._raiseField = TextField(actionButtonX["raise"], actionbuttonY, actionButtonWidth, actionButtonHeight, f"min {self._banker._minRaise}") # temp values except for the x and y
+        self._raiseField = TextField(actionButtonX["raise"], actionbuttonY, actionButtonWidth, actionButtonHeight, f"e.g: 100") # temp values except for the x and y
 
         # this stores the games function calls after the preFlop is done
         # its needed to cleanly go through the function calls without a if, else bird's nest mess
@@ -303,6 +303,7 @@ class GameController:
                         raiseButton = self._buttons.getButtonObject("raise")
                         raiseButton._active = True # now draw the button instead of the Text Field
                         self._raiseField.setDrawError(False) # do not draw the error
+                        self._raiseField._active = False
 
                 elif raiseInput != False: # if you inputted something that is not in the limits or correct
                     self._raiseField.setDrawError(True) # then error!
@@ -484,7 +485,6 @@ class GameController:
             self.removeFromCheckList(player) # if player previously checked get them out of the list now
             self.allInHandling(player, raiseAmount) # happens before the money is taken, or calculated wrong,               
             self._banker.handleRaise(player, raiseAmount)
-            self._raiseField.changePlaceholderText(f"min {self._banker._minRaise}") # usability design, show what the min value is.
             
         elif action == "fold":
             self.removeFromCheckList(player)  # remove from check list
@@ -726,15 +726,16 @@ class GameController:
 
         # check for broke ass players and then remove them
         brokePlayers = self._banker.getNoMoneyPlayers(self._players)
+        
+        # commence next game
+        self.waitForInput()
         if brokePlayers:
             self.removeFromGame(brokePlayers)
             
             # game over!!!
-            if self.checkGameOver():
+            if self.checkGameOver(brokePlayers):
                 return  # hahaaah
 
-        # commence next game
-        self.waitForInput()
         self.reset() # reset all flags, debts etc. for the new game start.
         self.rotateDealerButton() # + 1 to dealer button
         self.setBlinds() # blinds set at start of game.

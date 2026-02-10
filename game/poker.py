@@ -218,7 +218,7 @@ class GameController:
         }) # buttonManager takes the buttons as dictionary so it is easy to link to button
         # numbers not used since it would get confusing as which button i am refering to
 
-        self._raiseField = TextField(actionButtonX["raise"], actionbuttonY, actionButtonWidth, actionButtonHeight, f"e.g: {self._banker._minRaise}") # temp values except for the x and y
+        self._raiseField = TextField(actionButtonX["raise"], actionbuttonY, actionButtonWidth, actionButtonHeight, f"e.g: 100") # temp values except for the x and y
 
         # this stores the games function calls after the preFlop is done
         # its needed to cleanly go through the function calls without a if, else bird's nest mess
@@ -284,7 +284,7 @@ class GameController:
         clock = pygame.time.Clock()
      
         while True:
-            if self._currentPlayerTurn >= len(self._activePlayers): # MUST MUST MUST validate this, or loads of errors, it is a circular list.
+            if self._currentPlayerTurn >= len(self._activePlayers): # MUST validate this, or index and logical errors, must behave as circular list.
                 self._currentPlayerTurn = 0 # set to 0 if past the active players.
 
             currentPlayer = self._activePlayers[self._currentPlayerTurn] # this variable used for checks and validation this persons turn.
@@ -304,6 +304,7 @@ class GameController:
                         raiseButton = self._buttons.getButtonObject("raise")
                         raiseButton._active = True # now draw the button instead of the Text Field
                         self._raiseField.setDrawError(False) # do not draw the error
+                        self._raiseField._active = False
 
                 elif raiseInput != False: # if you inputted something that is not in the limits or correct
                     self._raiseField.setDrawError(True) # then error!
@@ -359,8 +360,7 @@ class GameController:
                                 pass
                             
                         if self.roundEnded(currentPlayer):
-                            self.drawActionNames() # action e.g. call
-                            self.drawActionValue() # value of action -> raise "20"
+                            self.drawPokerAssets()
                             pygame.display.update()
                             pygame.time.wait(1000)  # wait 1s so you can digest what happened
                             self.resetRound()
@@ -486,10 +486,18 @@ class GameController:
             self.removeFromCheckList(player) # if player previously checked get them out of the list now
             self.allInHandling(player, raiseAmount) # happens before the money is taken, or calculated wrong,               
             self._banker.handleRaise(player, raiseAmount)
-            self._raiseField.changePlaceholderText(f"e.g: {self._banker._minRaise}") # usability design, show what the min value is.
             
         elif action == "fold":
+            self.removeFromCheckList(player)  # remove from check list
+            player.fold()  # set ._isFolded flag
             self._activePlayers.remove(player)
+            if len(self._activePlayers) == 1: # premature win
+                self.drawPokerAssets() # draw updates to screen
+                pygame.display.update()
+                pygame.time.wait(1000)  # time to see the fold and digest the info
+                self.postRiver() # end the game
+                return
+            
             self._currentPlayerTurn -= 1 # MUST minus one from this since it is incremented by 1 on every valid turn, including fold.
             # but removing a player and then incrementing would skip the next player so to negate this we -1
 
@@ -615,6 +623,7 @@ class GameController:
 
             # pre-flop, small blind (dealer) acts first
             self._currentPlayerTurn = smallBlindIndex
+            self._lastPlayer = self._bigBlind
 
         else: # normal case, > 2 players
             if self._dealer._dealerButton in self._players:
@@ -630,6 +639,8 @@ class GameController:
                 self._currentPlayerTurn = bigBlindIndex + 1 # first player to manually act is one clockwise after the big blind.
                 if self._currentPlayerTurn == len(self._activePlayers): # make sure index isnt out of range ever.
                     self._currentPlayerTurn = 0
+                
+                self._lastPlayer = self._bigBlind
 
     def validateBlindIndexes(self, smallBlindIndex, bigBlindIndex):
         if smallBlindIndex == len(self._players): # this would be invalid if true
@@ -716,6 +727,9 @@ class GameController:
 
         # check for broke ass players and then remove them
         brokePlayers = self._banker.getNoMoneyPlayers(self._players)
+        
+        # commence next game
+        self.waitForInput()
         if brokePlayers:
             self.removeFromGame(brokePlayers)
             
@@ -723,8 +737,6 @@ class GameController:
             if self.checkGameOver(brokePlayers):
                 return  # hahaaah
 
-        # commence next game
-        self.waitForInput()
         self.reset() # reset all flags, debts etc. for the new game start.
         self.rotateDealerButton() # + 1 to dealer button
         self._banker.increaseBlindBet(self._roundsPassed)
@@ -734,8 +746,8 @@ class GameController:
         self._banker.takeBlindMoney(self._bigBlind, self._smallBlind, self._bigBlind)
         self.allInHandling(self._bigBlind, self._banker._bigBlindBet)
         
-        pygame.display.update()
         self.preFlop()
+        pygame.display.update()
     
     def allInHandling(self, player, bet):
         if self.playerIsGoingAllIn(player, bet):
@@ -745,42 +757,45 @@ class GameController:
 
     def checkGameOver(self, brokePlayers):
         # human has run outta money
-        humanPlayer = [p for p in brokePlayers if p._isHuman]
-        if humanPlayer: # if the player to remove is the human
-            humanPlayer = humanPlayer[0]
-
-            if humanPlayer._bank <= 0:
-                self.displayGameOverScreen(won=False) # show the appropriate lose message
+        for player in brokePlayers:
+            if player._isHuman:
+                self.displayGameOverScreen(False) # win = false
+                return True # signals that the game is over
         
-        # count how many people have money left if the human has money still
+        # count how many people have money left and since its past the human check for the no money players if there is only 1 player left, which means 
+        # they are human they have won!
         playersWithMoney = [p for p in self._players if p._bank > 0]
         if len(playersWithMoney) == 1:
-            self.displayGameOverScreen(won=True)
+            self.displayGameOverScreen(True) # win = true
+            return True # signals that the game is over
+        
+        return False # signals game is not over.
 
     def displayGameOverScreen(self, won):
-        screen.fill(POKERGREEN)
+        screen.fill(POKERGREEN) # back ground
         
         if won:
-            message = "CONGRATULATIONS! YOU WON"
-            subMessage = "AI SCRUBS SMASHED GG EZ"
+            message = "CONGRATULATIONS! YOU WON!" 
+            subMessage = "AI SCRUBZ SMASHED! GG EZ"
+
         else:
             message = "GAME OVER"
-            subMessage = "YOU SUCK"
+            subMessage = "YOU SUCK! AGI ALREADY?"
         
-        # win message
+        # render the big win or lose text
         mainText = fontConsolas.render(message, True, WHITE)
         mainRect = mainText.get_rect(center=(screenWidth // 2, screenHeight // 2 - 50))
         screen.blit(mainText, mainRect)
         
-        # render text underneth win message
+        # render the smaller win or lose text sub message
         subText = fontVerdana.render(subMessage, True, LIGHT_BLACK)
         subRect = subText.get_rect(center=(screenWidth // 2, screenHeight // 2 + 10))
         screen.blit(subText, subRect)
         
-        # tell user how to exit game
-        continueText = turnIndicatorFont.render("click to exit", True, WHITE)
-        continueRect = continueText.get_rect(center=(screenWidth // 2, screenHeight // 2 + 70))
-        screen.blit(continueText, continueRect)
+        # tell user how to leave the game
+        exitText = turnIndicatorFont.render("click to exit", True, WHITE)
+        exitTextRect = exitText.get_rect(center=(screenWidth // 2, screenHeight // 2 + 70)) # centre mathematically
+        screen.blit(exitText, exitTextRect)
         
         pygame.display.update()
         
@@ -815,6 +830,9 @@ class GameController:
 
         for player in self._activePlayers:
             playerBet = currentRoundBets.get(player, 0) # if not in then -> 0
+
+            if player._isAllIn:
+                continue # skip all-in players becoz they can't bet anymore
 
             if playerBet < largestBet: # accounts for checked players to keep playing since they have debts to pay still
                 if player not in self._playersChecked or largestBet > 0:

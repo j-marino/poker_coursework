@@ -259,7 +259,6 @@ class GameController:
         self._lastPlayer = None
         self._smallBlind = None # blinds to be decided based off dealer button position.
         self._bigBlind = None
-        self._roundsPassed = 0 
 
     def gameLoop(self):
         for nameIndex in AINames.keys():
@@ -417,7 +416,7 @@ class GameController:
             self._raiseHappened = False
             self._banker.resetDebtList(self._activePlayers) # set debts to 0
             self._banker.resetCurrentRoundBets() # no one has put any money on new round so set to 0.
-
+    
     def resetRound(self):
         self._roundCycleFinished = True # changes flag to show that we can move onto the next gameTurn if no raise happened.
         self.resetAIActionNames() # to stop drawing the AI actions since they're going to be changed
@@ -739,7 +738,6 @@ class GameController:
 
         self.reset() # reset all flags, debts etc. for the new game start.
         self.rotateDealerButton() # + 1 to dealer button
-        self._banker.increaseBlindBet(self._roundsPassed)
         self.setBlinds() # blinds set at start of game.
         self._banker.takeBlindMoney(self._smallBlind, self._smallBlind, self._bigBlind)
         self.allInHandling(self._smallBlind, self._banker._smallBlindBet)
@@ -792,7 +790,6 @@ class GameController:
         subRect = subText.get_rect(center=(screenWidth // 2, screenHeight // 2 + 10))
         screen.blit(subText, subRect)
         
-        # tell user how to leave the game
         exitText = turnIndicatorFont.render("click to exit", True, WHITE)
         exitTextRect = exitText.get_rect(center=(screenWidth // 2, screenHeight // 2 + 70)) # centre mathematically
         screen.blit(exitText, exitTextRect)
@@ -899,7 +896,6 @@ class GameController:
 
     def startNextRound(self):
         self._gameTurn += 1
-        self._roundsPassed += 1
         self.gameTurnState[self._gameTurn]()
 
         # reset the available actions, allowing players to check again.
@@ -1312,6 +1308,23 @@ class GameController:
         # for: prototype 3
         return winner
     
+    def handlePrematureWin(self):
+        # restructure this logic, used again in postriver
+        self._banker.givePotToWinner(self._activePlayers[0])
+        self.drawWinnerText(self._activePlayers[0])
+        pygame.display.update()
+
+        # Check for game over before continuing
+        brokePlayers = self._banker.getNoMoneyPlayers(self._players)
+        if brokePlayers:
+            self.removeFromGame(brokePlayers)
+            if self.checkGameOver():
+                return
+
+        self.waitForInput()
+        self.reset()
+        pygame.display.update()
+        self.preFlop()
 
     # all flags must be reset
     # deck must be shuffled and reset
@@ -1553,14 +1566,6 @@ class Banker:
 
         debtPaid = blind._bank if self.betGreaterThanBank(bet, blind._bank) else bet
         self.processBet(blind, debtPaid)
-    
-    def increaseBlindBet(self, roundsPassed):
-        self._smallBlindBet = int(self._smallBlindBet * 1.5) if roundsPassed % 3 == 0 else self._smallBlindBet # increase off rounds played
-        self._bigBlindBet = self._smallBlindBet * 2 # bi blind is small blind doubled always.
-        self._previousBet = self._smallBlindBet # set history for proper calculating or min raise 
-        self._currentBet = self._bigBlindBet 
-
-
 
 class Card:
     def __init__(self, value, suit, loadImage=True):
@@ -1940,7 +1945,7 @@ class TextField(pygame.Rect):
                 screen.blit(moneyFont.render(self._text, True, BLACK), (self.x + 5, self.y + 5)) 
 
             elif not self._text: # draw place holder instead if there is no text inputted
-                screen.blit(infoFont.render(str(self._placeholder), True, PLACEHOLDER_GREY), (self.x + 5, self.y + 5)) 
+                screen.blit(moneyFont.render(str(self._placeholder), True, PLACEHOLDER_GREY), (self.x + 5, self.y + 5)) 
                     
     def handleEvents(self, event):
         if event.type == pygame.QUIT:

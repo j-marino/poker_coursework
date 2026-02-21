@@ -100,20 +100,19 @@ AIPosY = {
 
 # each position will have the AI name drawn beneath it
 # names must be kept short (len<=6) so they dont take up too much screen space
-# for future feature implementation of balance
 AINames = { 
     1: "sharky",
-    2: "rusher",
-    3: "stackz",
-    4: "sphinx",
-    5: "richy"
+    # 2: "rusher",
+    # 3: "stackz",
+    # 4: "sphinx",
+    # 5: "richy"
 }
 
 AIs = ["human", "sharky", "rusher", "stackz", "sphinx", "richy"]
 
 screen = pygame.display.set_mode((screenWidth, screenHeight))
 
-
+# modular screen system for future additions of any features that require another screen.
 class ScreenManager:
     def __init__(self):
         self._screens = [] # keep a "stack" of screens. menu -> gamescreen
@@ -127,35 +126,29 @@ class ScreenManager:
     
     def nextScreen(self):
         self._currentScreen += 1 # increment the stack
-    
-    def getCurrentScreenIndex(self):
-        return self._currentScreen
         
-
+# generic screen blueprint that each unique screen should build on.
 class Screen:
     def __init__(self, action):
         self._action = action
     
     def runScreen(self):
-        if self._action: # stops from running invalid actions. (None type)
+        if self._action: # stops from running invalid actions e.g. None
             return self._action()
-    
-    def setAction(self, action):
-        self._action = action
 
 class GameScreen(Screen): 
-    def __init__(self, action): # action will be the GameController's gameloop.
+    def __init__(self, action): # action is the GameController's gameloop.
         super().__init__(action)
 
 
 class StartScreen(Screen):
     def __init__(self, action, screenManager):
         super().__init__(action)
-        self._screenManager = screenManager
+        self._screenManager = screenManager # manage the rest of the screens
+        # single start button centred on screen
         self._buttons = ButtonManager({
-            "start": Button(screenWidth / 2, screenHeight - 200, actionButtonWidth, actionButtonHeight, self.incrementStack, "start", WHITE)
+            "start": Button((screenWidth / 2) - (actionButtonWidth / 2), (screenHeight / 2) - (actionButtonHeight / 2), actionButtonWidth, actionButtonHeight, self.incrementStack, "start", WHITE)
         })
-        self._usernameField = TextField(screenWidth / 2, screenHeight - 500, actionButtonWidth, actionButtonHeight, "username")
 
     # goes to the next screen in the assigned stack.
     def incrementStack(self):
@@ -164,7 +157,6 @@ class StartScreen(Screen):
 
     def runScreen(self):
         clock = pygame.time.Clock()
-        self._usernameField._active = True # set the field to active so it is drawn.
 
         while True:
             for event in pygame.event.get():
@@ -172,26 +164,18 @@ class StartScreen(Screen):
                     pygame.quit()
                     exit()
 
-                usernameInput = self._usernameField.handleEvents(event) # handles enter, del, inputs.
-                self.validateUsername(usernameInput) # username must be within a range of characters.
-
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1: # if left click
                         # loops over all buttons to see if one was clicked
                         if self._buttons.buttonWasClicked(): 
-                            self._buttons.executeNamedButton(self._buttons.getActionName())
-                        
-                        
-            self._usernameField._active = True # field must have persistence so it is continually drawn.                     
+                            # uses modular button manager behaviour for the start button
+                            self._buttons.executeNamedButton(self._buttons.getActionName()) # go to the poker game once clicked
+                                                
             screen.fill(POKERGREEN)
             self._buttons.drawAllButtons(True)
-            self._usernameField.drawTextInput()
             pygame.display.update()
-            clock.tick(60)
+            clock.tick(60) # 60 fps
 
-    def validateUsername(self, username):
-        return True # implement later    
-        
 
 class GameController:
     def __init__(self):
@@ -218,7 +202,7 @@ class GameController:
         }) # buttonManager takes the buttons as dictionary so it is easy to link to button
         # numbers not used since it would get confusing as which button i am refering to
 
-        self._raiseField = TextField(actionButtonX["raise"], actionbuttonY, actionButtonWidth, actionButtonHeight, f"e.g: 100") # temp values except for the x and y
+        self._raiseField = TextField(actionButtonX["raise"], actionbuttonY, actionButtonWidth, actionButtonHeight, f"e.g: 100") # same position as the raise button
 
         # this stores the games function calls after the preFlop is done
         # its needed to cleanly go through the function calls without a if, else bird's nest mess
@@ -251,14 +235,11 @@ class GameController:
         # deal with picking up those who checked
         self._playersChecked = []
 
-        # NOTE: these attributes are for the foundations of prototype 3, they have been made just so the AI can make valid moves
-        # values for initialMinCall is a temp value
-        self._initalMinCall = 20
         self._availableActions = ["call", "fold", "raise"] # used for validation of moves, check not included since you cannot check preflop
         self._showdownRunning = False # showdown is when everyone is all in
-        self._lastPlayer = None
         self._smallBlind = None # blinds to be decided based off dealer button position.
         self._bigBlind = None
+        self._roundsPassed = 0 
 
     def gameLoop(self):
         for nameIndex in AINames.keys():
@@ -416,7 +397,7 @@ class GameController:
             self._raiseHappened = False
             self._banker.resetDebtList(self._activePlayers) # set debts to 0
             self._banker.resetCurrentRoundBets() # no one has put any money on new round so set to 0.
-    
+
     def resetRound(self):
         self._roundCycleFinished = True # changes flag to show that we can move onto the next gameTurn if no raise happened.
         self.resetAIActionNames() # to stop drawing the AI actions since they're going to be changed
@@ -590,11 +571,15 @@ class GameController:
         if self._playersChecked and player in self._playersChecked:
             self._playersChecked.remove(player) # keeps track of those who checked and removes if it cycles back and they make a turn.
 
-    def waitForInput(self):
+    def waitForClick(self):
         # when the round has finished the player must click a button or their mouse to progess
-        # TODO: add text saying something like "press and key to continue" 
-        waitingForInput = True
+        # indicate to the player how to carry on the game after the round finishes.
+        continueText = turnIndicatorFont.render("click to continue", True, WHITE)
+        textRect = continueText.get_rect(center=(screenWidth // 2, screenHeight // 2 + 120)) # below the centre of the screen
+        screen.blit(continueText, textRect)
+        pygame.display.update()
 
+        waitingForInput = True
         while waitingForInput:
             events = pygame.event.get()
 
@@ -604,7 +589,7 @@ class GameController:
                     exit()
 
                 # any button press or mouse press
-                if event.type == pygame.MOUSEBUTTONDOWN or event.type == pygame.KEYDOWN:
+                if event.type == pygame.MOUSEBUTTONDOWN:
                     waitingForInput = False
 
     def setBlinds(self):
@@ -622,7 +607,6 @@ class GameController:
 
             # pre-flop, small blind (dealer) acts first
             self._currentPlayerTurn = smallBlindIndex
-            self._lastPlayer = self._bigBlind
 
         else: # normal case, > 2 players
             if self._dealer._dealerButton in self._players:
@@ -639,8 +623,6 @@ class GameController:
                 if self._currentPlayerTurn == len(self._activePlayers): # make sure index isnt out of range ever.
                     self._currentPlayerTurn = 0
                 
-                self._lastPlayer = self._bigBlind
-
     def validateBlindIndexes(self, smallBlindIndex, bigBlindIndex):
         if smallBlindIndex == len(self._players): # this would be invalid if true
             smallBlindIndex = 0 # is a cyclical list so set 0 
@@ -728,7 +710,7 @@ class GameController:
         brokePlayers = self._banker.getNoMoneyPlayers(self._players)
         
         # commence next game
-        self.waitForInput()
+        self.waitForClick()
         if brokePlayers:
             self.removeFromGame(brokePlayers)
             
@@ -736,14 +718,16 @@ class GameController:
             if self.checkGameOver(brokePlayers):
                 return  # hahaaah
 
+        # commence next game
+        self.waitForClick()
         self.reset() # reset all flags, debts etc. for the new game start.
         self.rotateDealerButton() # + 1 to dealer button
+        self._banker.increaseBlindBet(self._roundsPassed)
         self.setBlinds() # blinds set at start of game.
         self._banker.takeBlindMoney(self._smallBlind, self._smallBlind, self._bigBlind)
         self.allInHandling(self._smallBlind, self._banker._smallBlindBet)
         self._banker.takeBlindMoney(self._bigBlind, self._smallBlind, self._bigBlind)
         self.allInHandling(self._bigBlind, self._banker._bigBlindBet)
-        
         self.preFlop()
         pygame.display.update()
     
@@ -829,7 +813,7 @@ class GameController:
             playerBet = currentRoundBets.get(player, 0) # if not in then -> 0
 
             if player._isAllIn:
-                continue # skip all-in players becoz they can't bet anymore
+                continue # skip all-in players because they can't bet anymore
 
             if playerBet < largestBet: # accounts for checked players to keep playing since they have debts to pay still
                 if player not in self._playersChecked or largestBet > 0:
@@ -850,7 +834,7 @@ class GameController:
                     if player._name in AIs:
                         AIs.remove(player._name)
 
-                # clean banker tracking -> no longer has money in the game, so remove
+                # no longer has money in the game so remove from banker tracking
                 if player in self._banker._playerToTotalMoneyIn:
                     del self._banker._playerToTotalMoneyIn[player]
 
@@ -858,7 +842,7 @@ class GameController:
                 if player in self._banker._raiseDebts:
                     del self._banker._raiseDebts[player]
 
-                # broke player no longer funded so remove from there too
+                # broke player no longer funded remove from funded list
                 if player in self._banker._fundedPlayers:
                     self._banker._fundedPlayers.remove(player)
             
@@ -896,6 +880,7 @@ class GameController:
 
     def startNextRound(self):
         self._gameTurn += 1
+        self._roundsPassed += 1
         self.gameTurnState[self._gameTurn]()
 
         # reset the available actions, allowing players to check again.
@@ -1307,24 +1292,6 @@ class GameController:
         # TODO: add a case of n num of winners with the same hand, for this i will simplify it to splitting the pot instead of who has higher variation.
         # for: prototype 3
         return winner
-    
-    def handlePrematureWin(self):
-        # restructure this logic, used again in postriver
-        self._banker.givePotToWinner(self._activePlayers[0])
-        self.drawWinnerText(self._activePlayers[0])
-        pygame.display.update()
-
-        # Check for game over before continuing
-        brokePlayers = self._banker.getNoMoneyPlayers(self._players)
-        if brokePlayers:
-            self.removeFromGame(brokePlayers)
-            if self.checkGameOver():
-                return
-
-        self.waitForInput()
-        self.reset()
-        pygame.display.update()
-        self.preFlop()
 
     # all flags must be reset
     # deck must be shuffled and reset
@@ -1429,7 +1396,6 @@ class Banker:
         self._currentRoundBets = {} # player-bet dict for collecting the debts of those who need to pay after a raise to continue.
         self._raiseDebts = {} # debt needed to be paid if someone raises by the other players.
         self._playerToTotalMoneyIn = {} # player object - money inputted k-v pair.
-        self._biggestAllIn = 0
     
     # initialies the list of players with money
     def setFundedPlayers(self, playerList):
@@ -1508,9 +1474,6 @@ class Banker:
     
     def betGreaterThanBank(self, bet, playerBank):
         return bet >= playerBank # >= here instead of >, since this logic is used for all in too, which is when the bet can be equal to your bank
-
-    def isBiggestAllIn(self, allInValue):
-        return allInValue > self._biggestAllIn # for calculating money returns, if someones all in is bigger than other person's all in.
     
     # keep track of TOTAL money person has inputted.
     def addToBetTotal(self, player, bet): 
@@ -1566,12 +1529,18 @@ class Banker:
 
         debtPaid = blind._bank if self.betGreaterThanBank(bet, blind._bank) else bet
         self.processBet(blind, debtPaid)
+    
+    def increaseBlindBet(self, roundsPassed):
+        self._smallBlindBet = int(self._smallBlindBet * 1.5) if roundsPassed % 3 == 0 else self._smallBlindBet # increase off rounds played
+        self._bigBlindBet = self._smallBlindBet * 2 # bi blind is small blind doubled always.
+        self._previousBet = self._smallBlindBet # set history for proper calculating or min raise 
+        self._currentBet = self._bigBlindBet 
+
 
 class Card:
     def __init__(self, value, suit, loadImage=True):
-        self._value = value
-        self._suit = suit
-        self._path = f"assets/cards/{self.getName()}.png"
+        self._value = value # e.g. 4
+        self._suit = suit # e.g. hearts
         self._width = cardWidth
         self._height = cardHeight
         self._x = self._y = None
@@ -1579,7 +1548,7 @@ class Card:
             path = f"assets/cards/{self.getName()}.png"
             self._image = pygame.transform.scale(pygame.image.load(path), (cardWidth, cardHeight))
         else:
-            self._image = None
+            self._image = None # performance in simulating the game by not rendering images.
 
     # returns the name of the card in the convention of the card images
     def getName(self):
@@ -1991,9 +1960,6 @@ class TextField(pygame.Rect):
     def resetInput(self):
         self._text = ""
     
-    def changePlaceholderText(self, value):
-        self._placeholder = str(value) # in raise field the placeholder changes to the min raise.
-
 
 class ButtonManager:
     def __init__(self, buttons):

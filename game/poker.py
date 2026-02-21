@@ -102,10 +102,10 @@ AIPosY = {
 # names must be kept short (len<=6) so they dont take up too much screen space
 AINames = { 
     1: "sharky",
-    # 2: "rusher",
-    # 3: "stackz",
-    # 4: "sphinx",
-    # 5: "richy"
+    2: "rusher",
+    3: "stackz",
+    4: "sphinx",
+    5: "richy"
 }
 
 AIs = ["human", "sharky", "rusher", "stackz", "sphinx", "richy"]
@@ -273,27 +273,33 @@ class GameController:
                 if event.type == pygame.QUIT:
                     exit()
 
-                raiseInput = int(self._raiseField.handleEvents(event)) # raise is a TextField, enter or key press or click are handled here
+                raiseInput = self._raiseField.handleEvents(event) # raise is a TextField, enter or key press or click are handled here
 
                 # validate the raise input so its only run if its within the limits.
-                if raiseInput != False and raiseInput >= self._banker._minRaise: # raise from box.
-                    if self._banker._minRaise <= raiseInput <= currentPlayer._bank:
-                        self._raiseField.resetInput() # sucessful execution, get rid of the text inside the box.
-                        self.humanAction("raise", currentPlayer, raiseInput) # process the raise with the inputted value
-                        currentPlayer = self._activePlayers[self._currentPlayerTurn]
-                        raiseButton = self._buttons.getButtonObject("raise")
-                        raiseButton._active = True # now draw the button instead of the Text Field
-                        self._raiseField.setDrawError(False) # do not draw the error
-                        self._raiseField._active = False
+                if raiseInput != False: 
+                    if raiseInput.isdigit():
+                        raiseInput = int(raiseInput)
+                        if raiseInput >= self._banker._minRaise or raiseInput >= currentPlayer._bank: # raise from box.
+                            if raiseInput >= currentPlayer._bank: # allow for all in from raise 
+                                raiseInput = currentPlayer._bank # set == to bank so you dont input more than what you have
+                            self._raiseField.resetInput() # sucessful execution, get rid of the text inside the box.
+                            self.humanAction("raise", currentPlayer, raiseInput) # process the raise with the inputted value
+                            currentPlayer = self._activePlayers[self._currentPlayerTurn]
+                            raiseButton = self._buttons.getButtonObject("raise")
+                            raiseButton._active = True # now draw the button instead of the Text Field
+                            self._raiseField.setDrawError(False) # do not draw the error
+                            self._raiseField._active = False
 
-                elif raiseInput != False: # if you inputted something that is not in the limits or correct
-                    self._raiseField.setDrawError(True) # then error!
+                        else: # valid digit but below min raise
+                            self._raiseField.setDrawError(True)
+                    else: # non-digit input e.g. letters, symbols
+                        self._raiseField.setDrawError(True)
                     
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1: # if left click
                         # loops over all buttons to see if one was clicked
                         if self._buttons.buttonWasClicked(): 
-
+                            self._raiseField.setDrawError(False) # do not draw the error
                             # e.g. namedAction = "raise", used for validation and general processing
                             namedAction = self._buttons.getActionName()
                             buttonObject = self._buttons.getButtonObject(namedAction)
@@ -719,7 +725,6 @@ class GameController:
                 return  # hahaaah
 
         # commence next game
-        self.waitForClick()
         self.reset() # reset all flags, debts etc. for the new game start.
         self.rotateDealerButton() # + 1 to dealer button
         self._banker.increaseBlindBet(self._roundsPassed)

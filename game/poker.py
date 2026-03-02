@@ -1540,6 +1540,7 @@ class Banker:
         self._bigBlindBet = self._smallBlindBet * 2 # bi blind is small blind doubled always.
         self._previousBet = self._smallBlindBet # set history for proper calculating or min raise 
         self._currentBet = self._bigBlindBet 
+        self._callValue = self._bigBlindBet
 
 
 class Card:

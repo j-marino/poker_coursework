@@ -4,12 +4,15 @@ Texas Hold'em against five AI opponents, built with Python and pygame. Each AI e
 
 ## Run
 
+
 ```
 uv sync
+```
+then
+```
 python main.py
 ```
 
-Keep your `assets/` folder (table, card faces, card back, dealer button) next to `main.py`.
 
 ## Project layout
 

@@ -12,7 +12,7 @@ then
 ```
 python main.py
 ```
-
+(can also just click on the run button on ```main.py```)
 
 ## Project layout
 

@@ -26,7 +26,7 @@ SCARY_RED = (200, 20, 20)              # error messages
 # Game rules
 #
 STARTING_MONEY = 1000
-MONTE_CARLO_SIMULATIONS = 20000 # can change according to system -> this is used as sort of a buffer of time so the player can comprehend a turn and they have a delay
+MONTE_CARLO_SIMULATIONS = 16000 # can change according to system -> this is used as sort of a buffer of time so the player can comprehend a turn and they have a delay
 # this is a hacky fix please change to real time delay (perhaps ASYNC so there are calculations done in the background during a time wait)
 
 # AI seats, clockwise from the player's left. The key is the seat number used
